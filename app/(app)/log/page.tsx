@@ -51,6 +51,7 @@ export default function LogWorkoutPage() {
   const [showDropdown, setShowDropdown] = useState(false);
   const [newExerciseName, setNewExerciseName] = useState('');
   const [showNewExercise, setShowNewExercise] = useState(false);
+  const [visibleLogsCount, setVisibleLogsCount] = useState(10);
   
   // Chart related state
   const [chartsData, setChartsData] = useState<ExerciseChart[]>([]);
@@ -86,14 +87,10 @@ export default function LogWorkoutPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
     const { data } = await supabase
       .from('workout_logs')
       .select('*, exercises(name)')
       .eq('user_id', user.id)
-      .gte('logged_at', sevenDaysAgo.toISOString().split('T')[0])
       .order('logged_at', { ascending: false })
       .order('created_at', { ascending: false });
 
@@ -228,7 +225,8 @@ export default function LogWorkoutPage() {
     setShowDropdown(false);
   };
 
-  const groupedLogs = logs.reduce((acc: Record<string, WorkoutLog[]>, log) => {
+  const displayedLogs = logs.slice(0, visibleLogsCount);
+  const groupedLogs = displayedLogs.reduce((acc: Record<string, WorkoutLog[]>, log) => {
     if (!acc[log.logged_at]) acc[log.logged_at] = [];
     acc[log.logged_at].push(log);
     return acc;
@@ -453,7 +451,7 @@ export default function LogWorkoutPage() {
       )}
 
       {/* Recent Logs */}
-      <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 16 }}>Recent Logs (7 days)</h2>
+      <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 16 }}>All Logs</h2>
 
       {logLoading ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
@@ -510,6 +508,33 @@ export default function LogWorkoutPage() {
             </div>
           </div>
         ))
+      )}
+
+      {!logLoading && logs.length > visibleLogsCount && (
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 24, marginBottom: 32 }}>
+          <button 
+            type="button"
+            onClick={() => setVisibleLogsCount(prev => prev + 10)}
+            style={{ 
+              padding: '10px 24px', 
+              fontSize: 14, 
+              borderRadius: 'var(--radius-full)',
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              color: 'var(--text-primary)',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+            }}
+          >
+            Show More
+          </button>
+        </div>
       )}
 
       {/* Click-away handler */}
