@@ -25,11 +25,20 @@ interface Stats {
   thisWeekLogs: number;
 }
 
+interface RecentLog {
+  exerciseName: string;
+  weight: number;
+  username: string;
+  avatar_url: string | null;
+  timeAgo: string;
+}
+
 const CHART_COLORS = ['#00f5ff', '#7c3aed', '#ec4899', '#10b981', '#f59e0b'];
 
 export default function DashboardPage() {
   const [charts, setCharts] = useState<ExerciseChart[]>([]);
   const [stats, setStats] = useState<Stats>({ totalLogs: 0, uniqueExercises: 0, bestLift: null, thisWeekLogs: 0 });
+  const [recentLog, setRecentLog] = useState<RecentLog | null>(null);
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
 
@@ -40,6 +49,48 @@ export default function DashboardPage() {
   const fetchDashboardData = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
+
+    // Fetch the recent log globally
+    try {
+      const { data: latestLogs } = await supabase
+        .from('workout_logs')
+        .select('user_id, weight_kg, created_at, exercises(name)')
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (latestLogs && latestLogs.length > 0) {
+        const globalLog = latestLogs[0];
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('username, avatar_url')
+          .eq('id', globalLog.user_id)
+          .single();
+
+        if (profile) {
+          const date = new Date(globalLog.created_at);
+          const now = new Date();
+          const diffMs = now.getTime() - date.getTime();
+          const diffMins = Math.floor(diffMs / 60000);
+          const diffHours = Math.floor(diffMins / 60);
+          const diffDays = Math.floor(diffHours / 24);
+          
+          let timeAgo = 'Just now';
+          if (diffDays > 0) timeAgo = `${diffDays}d ago`;
+          else if (diffHours > 0) timeAgo = `${diffHours}h ago`;
+          else if (diffMins > 0) timeAgo = `${diffMins}m ago`;
+
+          setRecentLog({
+            exerciseName: globalLog.exercises?.name || 'Unknown',
+            weight: globalLog.weight_kg,
+            username: profile.username || 'Unknown',
+            avatar_url: profile.avatar_url,
+            timeAgo
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching recent log:', err);
+    }
 
     // Get all logs for this user
     const { data: logs } = await supabase
@@ -176,6 +227,33 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+
+      {/* Recent Activity */}
+      {recentLog && (
+        <div className="card animate-fade-in-up" style={{ marginBottom: 32, animationDelay: '0.5s', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px', background: 'linear-gradient(145deg, rgba(14, 14, 22, 0.9), rgba(20, 20, 30, 0.9))', borderLeft: '3px solid var(--accent-purple)' }}>
+          <div>
+            <h3 style={{ fontSize: 13, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--text-muted)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <TrendingUp size={14} style={{ color: 'var(--accent-purple)' }}/> Most Recent Community Log
+            </h3>
+            <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>
+              {recentLog.exerciseName} <span style={{ color: 'var(--accent-cyan)', fontWeight: 600, fontSize: 18 }}>• {recentLog.weight}kg</span>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-primary)' }}>{recentLog.username}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{recentLog.timeAgo}</div>
+            </div>
+            {recentLog.avatar_url ? (
+              <img src={recentLog.avatar_url} alt="" className="avatar" style={{ width: 44, height: 44, border: '2px solid rgba(124, 58, 237, 0.3)' }} />
+            ) : (
+              <div className="avatar-placeholder" style={{ width: 44, height: 44, fontSize: 16, background: 'rgba(124, 58, 237, 0.1)', color: 'var(--accent-purple)', border: '2px solid rgba(124, 58, 237, 0.3)' }}>
+                {recentLog.username.charAt(0).toUpperCase()}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Charts */}
       {charts.length === 0 ? (
