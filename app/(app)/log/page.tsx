@@ -2,7 +2,16 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Plus, Trash2, Dumbbell, Search } from 'lucide-react';
+import { Plus, Trash2, Dumbbell, Search, TrendingUp } from 'lucide-react';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from 'recharts';
 
 interface Exercise {
   id: string;
@@ -17,6 +26,14 @@ interface WorkoutLog {
   logged_at: string;
   exercises: { name: string };
 }
+
+interface ExerciseChart {
+  exerciseId: string;
+  exerciseName: string;
+  data: { date: string; weight: number }[];
+}
+
+const CHART_COLORS = ['#00f5ff', '#7c3aed', '#ec4899', '#10b981', '#f59e0b'];
 
 export default function LogWorkoutPage() {
   const [exercises, setExercises] = useState<Exercise[]>([]);
@@ -34,6 +51,11 @@ export default function LogWorkoutPage() {
   const [showDropdown, setShowDropdown] = useState(false);
   const [newExerciseName, setNewExerciseName] = useState('');
   const [showNewExercise, setShowNewExercise] = useState(false);
+  
+  // Chart related state
+  const [chartsData, setChartsData] = useState<ExerciseChart[]>([]);
+  const [selectedChartExerciseId, setSelectedChartExerciseId] = useState<string>('');
+  
   const supabase = createClient();
 
   useEffect(() => {
@@ -76,6 +98,60 @@ export default function LogWorkoutPage() {
       .order('created_at', { ascending: false });
 
     if (data) setLogs(data as any);
+
+    // Fetch all logs to build charts and find best lift
+    const { data: allLogs } = await supabase
+      .from('workout_logs')
+      .select('*, exercises(name)')
+      .eq('user_id', user.id)
+      .order('logged_at', { ascending: true });
+      
+    if (allLogs && allLogs.length > 0) {
+      // Group by exercise
+      const exerciseLogs: Record<string, { name: string; logs: any[] }> = {};
+      let bestLiftWeight = -1;
+      let bestLiftExerciseId = '';
+
+      allLogs.forEach((log: any) => {
+        const eid = log.exercise_id;
+        if (!exerciseLogs[eid]) {
+          exerciseLogs[eid] = { name: log.exercises?.name || 'Unknown', logs: [] };
+        }
+        exerciseLogs[eid].logs.push(log);
+        
+        if (log.weight_kg > bestLiftWeight) {
+          bestLiftWeight = log.weight_kg;
+          bestLiftExerciseId = eid;
+        }
+      });
+
+      const charts: ExerciseChart[] = Object.entries(exerciseLogs).map(([eid, { name, logs }]) => {
+        // Get max weight per day
+        const dailyMax = logs.reduce((acc: Record<string, number>, l: any) => {
+          const date = l.logged_at;
+          if (!acc[date] || l.weight_kg > acc[date]) {
+            acc[date] = l.weight_kg;
+          }
+          return acc;
+        }, {});
+
+        return {
+          exerciseId: eid,
+          exerciseName: name,
+          data: Object.entries(dailyMax)
+            .map(([date, weight]) => ({ date, weight: Number(weight) }))
+            .sort((a, b) => a.date.localeCompare(b.date)),
+        };
+      });
+
+      setChartsData(charts);
+      if (bestLiftExerciseId && !selectedChartExerciseId) {
+        setSelectedChartExerciseId(bestLiftExerciseId);
+      } else if (charts.length > 0 && !selectedChartExerciseId) {
+        setSelectedChartExerciseId(charts[0].exerciseId);
+      }
+    }
+    
     setLogLoading(false);
   };
 
@@ -157,6 +233,26 @@ export default function LogWorkoutPage() {
     acc[log.logged_at].push(log);
     return acc;
   }, {});
+
+  const selectedChart = chartsData.find(c => c.exerciseId === selectedChartExerciseId);
+
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div style={{
+          background: 'rgba(14, 14, 22, 0.95)',
+          border: '1px solid rgba(0, 245, 255, 0.15)',
+          borderRadius: 8,
+          padding: '10px 14px',
+          fontSize: 13,
+        }}>
+          <p style={{ color: '#8888a0', marginBottom: 4 }}>{label}</p>
+          <p style={{ color: '#00f5ff', fontWeight: 600 }}>{payload[0].value} kg</p>
+        </div>
+      );
+    }
+    return null;
+  };
 
   return (
     <div className="animate-fade-in-up">
@@ -299,6 +395,62 @@ export default function LogWorkoutPage() {
           </button>
         </form>
       </div>
+
+      {chartsData.length > 0 && (
+        <div className="card animate-fade-in-up" style={{ marginBottom: 32, animationDelay: '0.2s' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <TrendingUp size={18} style={{ color: 'var(--accent-cyan)' }} /> 
+              Progress Chart
+            </h3>
+            <select
+              className="select"
+              style={{ width: 'auto', padding: '6px 12px', fontSize: 14 }}
+              value={selectedChartExerciseId}
+              onChange={(e) => setSelectedChartExerciseId(e.target.value)}
+            >
+              {chartsData.map((chart) => (
+                <option key={chart.exerciseId} value={chart.exerciseId}>
+                  {chart.exerciseName}
+                </option>
+              ))}
+            </select>
+          </div>
+          
+          {selectedChart && (
+            <ResponsiveContainer width="100%" height={240}>
+              <LineChart data={selectedChart.data}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fill: '#55556a', fontSize: 11 }}
+                  axisLine={{ stroke: 'rgba(255,255,255,0.06)' }}
+                  tickLine={false}
+                  tickFormatter={(v) => {
+                    const d = new Date(v);
+                    return `${d.getDate()}/${d.getMonth() + 1}`;
+                  }}
+                />
+                <YAxis
+                  tick={{ fill: '#55556a', fontSize: 11 }}
+                  axisLine={{ stroke: 'rgba(255,255,255,0.06)' }}
+                  tickLine={false}
+                  unit="kg"
+                />
+                <Tooltip content={<CustomTooltip />} />
+                <Line
+                  type="monotone"
+                  dataKey="weight"
+                  stroke="#00f5ff"
+                  strokeWidth={2}
+                  dot={{ r: 3, fill: "#00f5ff" }}
+                  activeDot={{ r: 5, stroke: "#00f5ff", strokeWidth: 2 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      )}
 
       {/* Recent Logs */}
       <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 16 }}>Recent Logs (7 days)</h2>
