@@ -162,16 +162,14 @@ export default function DashboardPage() {
     if (active && payload && payload.length) {
       return (
         <div style={{
-          background: '#ffffff',
-          border: '2px dashed #2d2d2d',
-          borderRadius: 4,
+          background: 'rgba(14, 14, 22, 0.95)',
+          border: '1px solid rgba(0, 245, 255, 0.15)',
+          borderRadius: 8,
           padding: '10px 14px',
-          fontSize: 15,
-          fontFamily: "'Kalam', cursive",
-          boxShadow: '2px 2px 0px rgba(0,0,0,0.2)'
+          fontSize: 13,
         }}>
-          <p style={{ color: '#555', marginBottom: 4, fontWeight: 700 }}>{label}</p>
-          <p style={{ color: '#2d2d2d', fontWeight: 700, fontSize: 18 }}>{payload[0].value} kg</p>
+          <p style={{ color: '#8888a0', marginBottom: 4 }}>{label}</p>
+          <p style={{ color: '#00f5ff', fontWeight: 600 }}>{payload[0].value} kg</p>
         </div>
       );
     }
@@ -267,37 +265,42 @@ export default function DashboardPage() {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(440px, 1fr))', gap: 20 }}>
           {charts.map((chart, i) => (
-            <div key={chart.exerciseName} className="paper-chart-container animate-fade-in-up" style={{ animationDelay: `${0.1 * (i + 1)}s`, padding: '24px 16px 16px' }}>
-              <h3 style={{ fontSize: 22, fontWeight: 700, marginBottom: 20, textAlign: 'center', fontFamily: "'Kalam', cursive", color: '#2d2d2d', letterSpacing: 1 }}>
+            <div key={chart.exerciseName} className="card animate-fade-in-up" style={{ animationDelay: `${0.1 * (i + 1)}s` }}>
+              <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{
+                  width: 8, height: 8, borderRadius: '50%',
+                  background: CHART_COLORS[i % CHART_COLORS.length],
+                  display: 'inline-block'
+                }} />
                 {chart.exerciseName}
               </h3>
-              <ResponsiveContainer width="100%" height={220} style={{ zIndex: 1, position: 'relative' }}>
-                <LineChart data={chart.data} margin={{ top: 5, right: 20, bottom: 5, left: 10 }}>
-                  <CartesianGrid strokeDasharray="4 4" stroke="#d4d4d4" vertical={false} />
+              <ResponsiveContainer width="100%" height={220}>
+                <LineChart data={chart.data}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
                   <XAxis
                     dataKey="date"
-                    tick={{ fill: '#444', fontSize: 14, fontFamily: "'Kalam', cursive" }}
-                    axisLine={{ stroke: '#2d2d2d', strokeWidth: 2 }}
-                    tickLine={{ stroke: '#2d2d2d', strokeWidth: 2 }}
+                    tick={{ fill: '#55556a', fontSize: 11 }}
+                    axisLine={{ stroke: 'rgba(255,255,255,0.06)' }}
+                    tickLine={false}
                     tickFormatter={(v) => {
                       const d = new Date(v);
                       return `${d.getDate()}/${d.getMonth() + 1}`;
                     }}
                   />
                   <YAxis
-                    tick={{ fill: '#444', fontSize: 14, fontFamily: "'Kalam', cursive" }}
-                    axisLine={{ stroke: '#2d2d2d', strokeWidth: 2 }}
-                    tickLine={{ stroke: '#2d2d2d', strokeWidth: 2 }}
+                    tick={{ fill: '#55556a', fontSize: 11 }}
+                    axisLine={{ stroke: 'rgba(255,255,255,0.06)' }}
+                    tickLine={false}
                     unit="kg"
                   />
-                  <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#ccc', strokeWidth: 1, strokeDasharray: '4 4' }} />
+                  <Tooltip content={<CustomTooltip />} />
                   <Line
                     type="monotone"
                     dataKey="weight"
-                    stroke="#2d2d2d"
-                    strokeWidth={3}
-                    dot={{ r: 4, fill: '#ffffff', stroke: '#2d2d2d', strokeWidth: 2 }}
-                    activeDot={{ r: 6, fill: '#ffffff', stroke: '#2d2d2d', strokeWidth: 3 }}
+                    stroke={CHART_COLORS[i % CHART_COLORS.length]}
+                    strokeWidth={2}
+                    dot={{ r: 3, fill: CHART_COLORS[i % CHART_COLORS.length] }}
+                    activeDot={{ r: 5, stroke: CHART_COLORS[i % CHART_COLORS.length], strokeWidth: 2 }}
                   />
                 </LineChart>
               </ResponsiveContainer>
