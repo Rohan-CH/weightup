@@ -505,6 +505,7 @@ tbody tr:hover {
 /* ============ TABS ============ */
 .tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
   background: var(--bg-input);
   border-radius: var(--radius-md);

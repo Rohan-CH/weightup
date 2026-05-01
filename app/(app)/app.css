@@ -164,6 +164,19 @@
   cursor: pointer;
 }
 
+.mobile-toggle.hidden {
+  display: none !important;
+}
+
+.mobile-close-btn {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: 4px;
+}
+
 .sidebar-overlay {
   display: none;
 }
@@ -183,6 +196,11 @@
   }
   .mobile-toggle {
     display: flex;
+  }
+  .mobile-close-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
   .sidebar-overlay {
     display: none;

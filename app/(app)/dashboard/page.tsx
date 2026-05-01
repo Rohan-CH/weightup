@@ -192,7 +192,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 32 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 16, marginBottom: 32 }}>
         <div className="stat-card" style={{ animationDelay: '0.1s' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
             <Dumbbell size={18} style={{ color: 'var(--accent-cyan)' }} />
@@ -230,7 +230,7 @@ export default function DashboardPage() {
 
       {/* Recent Activity */}
       {recentLog && (
-        <div className="card animate-fade-in-up" style={{ marginBottom: 32, animationDelay: '0.5s', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px', background: 'linear-gradient(145deg, rgba(14, 14, 22, 0.9), rgba(20, 20, 30, 0.9))', borderLeft: '3px solid var(--accent-purple)' }}>
+        <div className="card animate-fade-in-up" style={{ marginBottom: 32, animationDelay: '0.5s', display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px', background: 'linear-gradient(145deg, rgba(14, 14, 22, 0.9), rgba(20, 20, 30, 0.9))', borderLeft: '3px solid var(--accent-purple)' }}>
           <div>
             <h3 style={{ fontSize: 13, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--text-muted)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
               <TrendingUp size={14} style={{ color: 'var(--accent-purple)' }}/> Most Recent Community Log
@@ -263,7 +263,7 @@ export default function DashboardPage() {
           <p>Start logging your workouts to see your progress charts here.</p>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(440px, 1fr))', gap: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 440px), 1fr))', gap: 20 }}>
           {charts.map((chart, i) => (
             <div key={chart.exerciseName} className="card animate-fade-in-up" style={{ animationDelay: `${0.1 * (i + 1)}s` }}>
               <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>

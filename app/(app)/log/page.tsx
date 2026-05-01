@@ -350,7 +350,7 @@ export default function LogWorkoutPage() {
             </div>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 100px), 1fr))', gap: 12 }}>
             <div className="form-group">
               <label className="label">Weight (kg)</label>
               <input

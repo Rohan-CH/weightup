@@ -59,11 +59,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <div className="grid-bg" />
 
       <button
-        className="mobile-toggle"
-        onClick={() => setSidebarOpen(!sidebarOpen)}
-        aria-label="Toggle navigation"
+        className={`mobile-toggle ${sidebarOpen ? 'hidden' : ''}`}
+        onClick={() => setSidebarOpen(true)}
+        aria-label="Open navigation"
       >
-        {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
+        <Menu size={20} />
       </button>
 
       <div
@@ -72,8 +72,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       />
 
       <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
-        <div className="sidebar-header">
+        <div className="sidebar-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div className="sidebar-brand">WeightUp</div>
+          <button 
+            className="mobile-close-btn" 
+            onClick={() => setSidebarOpen(false)}
+            aria-label="Close navigation"
+          >
+            <X size={20} />
+          </button>
         </div>
 
         <nav className="sidebar-nav">
