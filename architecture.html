@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WeightUp – Architecture Overview</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    :root {
+      --bg: #08080f; --bg2: #0e0e1a; --bg3: #13131f;
+      --border: rgba(255,255,255,0.07);
+      --cyan: #00f5ff; --purple: #7c3aed; --pink: #ec4899;
+      --green: #10b981; --orange: #f59e0b;
+      --text: #e8e8f0; --muted: #55556a; --sub: #8888a0;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      line-height: 1.4;
+      height: 100vh;
+      overflow: hidden; /* Prevent scrolling, force single page */
+      display: flex;
+      flex-direction: column;
+      padding: 16px 24px;
+    }
+
+    /* ── Header ── */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .header-left h1 {
+      font-size: 24px;
+      font-weight: 800;
+      background: linear-gradient(135deg, #fff 30%, var(--cyan));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 4px;
+    }
+    .header-left p { font-size: 13px; color: var(--sub); }
+    .meta { display: flex; gap: 16px; font-size: 11px; color: var(--muted); }
+    .meta span { color: var(--text); font-weight: 600; margin-left: 4px; }
+
+    /* ── Main Grid ── */
+    .grid-container {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      grid-template-rows: auto auto;
+      gap: 16px;
+      flex: 1;
+      min-height: 0; /* Important for preventing overflow */
+    }
+
+    /* ── Section ── */
+    section {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+    }
+    .section-label {
+      font-size: 10px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--cyan);
+      margin-bottom: 12px;
+      font-weight: 700;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 6px;
+    }
+
+    /* ── Tech Stack ── */
+    .tech-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .tech-card { background: var(--bg3); padding: 8px; border-radius: 6px; border: 1px solid var(--border); }
+    .tech-name { font-size: 11px; font-weight: 700; margin-bottom: 2px; }
+    .tech-desc { font-size: 10px; color: var(--sub); }
+
+    /* ── App Routes ── */
+    .route-list { display: flex; flex-direction: column; gap: 6px; }
+    .route { display: flex; align-items: center; justify-content: space-between; background: var(--bg3); padding: 6px 10px; border-radius: 6px; font-size: 11px; }
+    .route-path { font-family: 'JetBrains Mono', monospace; color: var(--cyan); width: 100px; }
+    .route-desc { color: var(--sub); flex: 1; margin-right: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .route-badge { font-size: 9px; padding: 2px 6px; border-radius: 4px; font-weight: 600; text-transform: uppercase; border: 1px solid currentColor; }
+    .rb-server { color: var(--green); background: rgba(16,185,129,.1); }
+    .rb-client { color: #a78bfa; background: rgba(124,58,237,.1); }
+
+    /* ── DB Schema ── */
+    .table-list { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
+    .db-table { background: var(--bg3); border-radius: 6px; border: 1px solid var(--border); }
+    .db-header { padding: 6px 8px; font-size: 11px; font-weight: 700; font-family: 'JetBrains Mono', monospace; border-bottom: 1px solid var(--border); color: var(--pink); }
+    .db-row { padding: 4px 8px; font-size: 10px; display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.03); }
+    .db-col { font-family: 'JetBrains Mono', monospace; color: var(--text); }
+    .db-type { color: var(--muted); }
+
+    /* ── Auth & Data Flow ── */
+    .flow-step { font-size: 11px; background: var(--bg3); padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between; }
+    .flow-arrow { text-align: center; color: var(--muted); font-size: 14px; line-height: 1; margin: 2px 0; }
+    
+    /* ── Project Structure ── */
+    pre.file-tree { font-family: 'JetBrains Mono', monospace; font-size: 10px; line-height: 1.5; color: var(--sub); margin: 0; }
+    .file-tree .hl { color: var(--text); }
+    .file-tree .dir { color: var(--cyan); }
+    .file-tree .cmt { color: var(--muted); }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-left">
+      <h1>WeightUp Architecture Overview</h1>
+      <p>Full-stack strength-tracking application built for real-time progress analytics.</p>
+    </div>
+    <div class="meta">
+      <div>Author <span>Rohan Chakkadath</span></div>
+      <div>Date <span>Nov 2025</span></div>
+      <div>Version <span>0.1.0</span></div>
+    </div>
+  </header>
+
+  <!-- Main Grid -->
+  <div class="grid-container">
+
+    <!-- Column 1 -->
+    <section style="grid-row: span 2;">
+      <div class="section-label">01 — Tech Stack</div>
+      <div class="tech-grid" style="margin-bottom: 12px;">
+        <div class="tech-card"><div class="tech-name">Next.js 16</div><div class="tech-desc">App Router, SSR, Middleware</div></div>
+        <div class="tech-card"><div class="tech-name">React 19</div><div class="tech-desc">Client Hooks, State</div></div>
+        <div class="tech-card"><div class="tech-name">Supabase</div><div class="tech-desc">Postgres DB, Auth, Storage</div></div>
+        <div class="tech-card"><div class="tech-name">Recharts</div><div class="tech-desc">Line Charts</div></div>
+        <div class="tech-card"><div class="tech-name">Tailwind v4</div><div class="tech-desc">Dark Mode UI</div></div>
+        <div class="tech-card"><div class="tech-name">TypeScript 5</div><div class="tech-desc">End-to-End Type Safety</div></div>
+      </div>
+
+      <div class="section-label">02 — App Routes</div>
+      <div class="route-list">
+        <div class="route"><span class="route-path">/login & signup</span><span class="route-desc">Auth forms</span><span class="route-badge rb-server">Server</span></div>
+        <div class="route"><span class="route-path">/dashboard</span><span class="route-desc">Stats & Charts</span><span class="route-badge rb-client">Client</span></div>
+        <div class="route"><span class="route-path">/log</span><span class="route-desc">Workout Logger</span><span class="route-badge rb-client">Client</span></div>
+        <div class="route"><span class="route-path">/leaderboard</span><span class="route-desc">Global Rankings</span><span class="route-badge rb-client">Client</span></div>
+        <div class="route"><span class="route-path">/profile</span><span class="route-desc">Settings</span><span class="route-badge rb-client">Client</span></div>
+      </div>
+    </section>
+
+    <!-- Column 2 -->
+    <section style="grid-row: span 2;">
+      <div class="section-label">03 — Database Schema</div>
+      <div class="table-list">
+        <div class="db-table">
+          <div class="db-header">profiles</div>
+          <div class="db-row"><span class="db-col">id</span><span class="db-type">UUID PK FK→auth.users</span></div>
+          <div class="db-row"><span class="db-col">username</span><span class="db-type">TEXT UNIQUE</span></div>
+          <div class="db-row"><span class="db-col">avatar_url</span><span class="db-type">TEXT null</span></div>
+        </div>
+        <div class="db-table">
+          <div class="db-header">exercises</div>
+          <div class="db-row"><span class="db-col">id</span><span class="db-type">UUID PK</span></div>
+          <div class="db-row"><span class="db-col">name</span><span class="db-type">TEXT UNIQUE</span></div>
+          <div class="db-row"><span class="db-col">is_custom</span><span class="db-type">BOOLEAN</span></div>
+          <div class="db-row"><span class="db-col">created_by</span><span class="db-type">UUID FK→profiles</span></div>
+        </div>
+        <div class="db-table">
+          <div class="db-header">workout_logs</div>
+          <div class="db-row"><span class="db-col">id</span><span class="db-type">UUID PK</span></div>
+          <div class="db-row"><span class="db-col">user_id</span><span class="db-type">UUID FK→profiles</span></div>
+          <div class="db-row"><span class="db-col">exercise_id</span><span class="db-type">UUID FK→exercises</span></div>
+          <div class="db-row"><span class="db-col">weight_kg</span><span class="db-type">NUMERIC(7,2)</span></div>
+          <div class="db-row"><span class="db-col">reps</span><span class="db-type">INTEGER</span></div>
+          <div class="db-row"><span class="db-col">logged_at</span><span class="db-type">DATE</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Column 3 -->
+    <section>
+      <div class="section-label">04 — Auth & Data Flow</div>
+      <div class="flow-step"><span style="color:var(--cyan)">React UI (Browser)</span></div>
+      <div class="flow-arrow">↓</div>
+      <div class="flow-step"><span style="color:#a78bfa">Supabase Browser Client</span> <span>lib/supabase/client.ts</span></div>
+      <div class="flow-arrow">↓</div>
+      <div class="flow-step"><span style="color:var(--orange)">Next.js Middleware</span> <span>Session / Auth guards</span></div>
+      <div class="flow-arrow">↓</div>
+      <div class="flow-step"><span style="color:var(--green)">Supabase Server Client</span> <span>lib/supabase/server.ts</span></div>
+      <div class="flow-arrow">↓</div>
+      <div class="flow-step"><span style="color:var(--pink)">Postgres Database</span> <span>RLS policies applied</span></div>
+    </section>
+
+    <section>
+      <div class="section-label">05 — Project Structure</div>
+      <pre class="file-tree">
+<span class="hl">weightup/</span>
+├── <span class="dir">app/</span>
+│   ├── <span class="dir">(auth)/</span>      <span class="cmt"># Login & signup pages</span>
+│   ├── <span class="dir">(app)/</span>       <span class="cmt"># Protected app shell</span>
+│   │   ├── layout.tsx
+│   │   ├── dashboard/page.tsx
+│   │   └── log/page.tsx
+│   └── layout.tsx
+├── <span class="dir">lib/supabase/</span>
+│   ├── client.ts    <span class="cmt"># Browser client</span>
+│   ├── server.ts    <span class="cmt"># Server client</span>
+│   └── middleware.ts<span class="cmt"># Session refresh</span>
+├── <span class="dir">supabase/</span>
+│   └── schema.sql   <span class="cmt"># DB schema & seed</span>
+└── middleware.ts    <span class="cmt"># Next.js edge</span></pre>
+    </section>
+
+  </div>
+</body>
+</html>

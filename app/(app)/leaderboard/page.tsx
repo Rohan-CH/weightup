@@ -2,9 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Trophy, Crown, Medal, Award } from 'lucide-react';
+import { Trophy, Crown, Medal, Award, Users } from 'lucide-react';
 
 interface Exercise {
+  id: string;
+  name: string;
+}
+
+interface Circle {
   id: string;
   name: string;
 }
@@ -32,37 +37,74 @@ export default function LeaderboardPage() {
   const [tab, setTab] = useState<'exercise' | 'powerlifter'>('exercise');
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [selectedExercise, setSelectedExercise] = useState('');
+  const [circles, setCircles] = useState<Circle[]>([]);
+  const [selectedCircle, setSelectedCircle] = useState('');
+  const [memberIds, setMemberIds] = useState<string[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [powerlifterBoard, setPowerlifterBoard] = useState<PowerlifterEntry[]>([]);
   const [loading, setLoading] = useState(false);
+  const [initLoading, setInitLoading] = useState(true);
   const supabase = createClient();
 
   useEffect(() => {
-    fetchExercises();
+    init();
   }, []);
 
-  useEffect(() => {
-    if (tab === 'powerlifter') {
-      fetchPowerlifterLeaderboard();
-    }
-  }, [tab]);
+  const init = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
 
-  useEffect(() => {
-    if (selectedExercise) {
-      fetchExerciseLeaderboard(selectedExercise);
-    }
-  }, [selectedExercise]);
-
-  const fetchExercises = async () => {
-    const { data } = await supabase
+    const { data: exData } = await supabase
       .from('exercises')
       .select('id, name')
       .order('name');
-    if (data) {
-      setExercises(data);
-      if (data.length > 0) setSelectedExercise(data[0].id);
+    if (exData) {
+      setExercises(exData);
+      if (exData.length > 0) setSelectedExercise(exData[0].id);
     }
+
+    if (user) {
+      const { data: circleRows } = await supabase
+        .from('circle_members')
+        .select('circles(id, name)')
+        .eq('user_id', user.id);
+      if (circleRows) {
+        const list: Circle[] = circleRows
+          .filter((r: any) => r.circles)
+          .map((r: any) => r.circles)
+          .sort((a: Circle, b: Circle) => a.name.localeCompare(b.name));
+        setCircles(list);
+        if (list.length > 0) setSelectedCircle(list[0].id);
+      }
+    }
+    setInitLoading(false);
   };
+
+  // Load the member ids whenever the selected circle changes.
+  useEffect(() => {
+    if (!selectedCircle) {
+      setMemberIds([]);
+      return;
+    }
+    (async () => {
+      const { data } = await supabase
+        .from('circle_members')
+        .select('user_id')
+        .eq('circle_id', selectedCircle);
+      setMemberIds(data ? data.map((m: any) => m.user_id) : []);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCircle]);
+
+  useEffect(() => {
+    if (memberIds.length === 0) {
+      setLeaderboard([]);
+      setPowerlifterBoard([]);
+      return;
+    }
+    if (tab === 'powerlifter') fetchPowerlifterLeaderboard();
+    else if (selectedExercise) fetchExerciseLeaderboard(selectedExercise);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, selectedExercise, memberIds]);
 
   const fetchExerciseLeaderboard = async (exerciseId: string) => {
     setLoading(true);
@@ -70,11 +112,11 @@ export default function LeaderboardPage() {
     const { data: logs } = await supabase
       .from('workout_logs')
       .select('user_id, weight_kg')
-      .eq('exercise_id', exerciseId);
+      .eq('exercise_id', exerciseId)
+      .in('user_id', memberIds);
 
     if (!logs) { setLoading(false); return; }
 
-    // Get max weight per user
     const userMax: Record<string, number> = {};
     logs.forEach((l: any) => {
       if (!userMax[l.user_id] || l.weight_kg > userMax[l.user_id]) {
@@ -104,7 +146,6 @@ export default function LeaderboardPage() {
   const fetchPowerlifterLeaderboard = async () => {
     setLoading(true);
 
-    // Get exercise IDs for the 3 powerlifts
     const { data: plExercises } = await supabase
       .from('exercises')
       .select('id, name')
@@ -123,11 +164,11 @@ export default function LeaderboardPage() {
     const { data: logs } = await supabase
       .from('workout_logs')
       .select('user_id, exercise_id, weight_kg')
-      .in('exercise_id', exerciseIds);
+      .in('exercise_id', exerciseIds)
+      .in('user_id', memberIds);
 
     if (!logs) { setLoading(false); return; }
 
-    // Max per user per exercise
     const userExerciseMax: Record<string, Record<string, number>> = {};
     logs.forEach((l: any) => {
       if (!userExerciseMax[l.user_id]) userExerciseMax[l.user_id] = {};
@@ -179,146 +220,180 @@ export default function LeaderboardPage() {
     return '';
   };
 
+  if (initLoading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
+        <div className="spinner spinner-lg" />
+      </div>
+    );
+  }
+
   return (
     <div className="animate-fade-in-up">
       <div className="page-header">
         <h1>Leaderboard</h1>
-        <p>See how you stack up against the community</p>
+        <p>See how you stack up against your circle</p>
       </div>
 
-      {/* Tabs */}
-      <div className="tabs" style={{ maxWidth: 460 }}>
-        <button className={`tab ${tab === 'exercise' ? 'active' : ''}`} onClick={() => setTab('exercise')}>
-          <Trophy size={15} style={{ marginRight: 6, verticalAlign: 'middle' }} /> Exercise
-        </button>
-        <button className={`tab ${tab === 'powerlifter' ? 'active' : ''}`} onClick={() => setTab('powerlifter')}>
-          <Award size={15} style={{ marginRight: 6, verticalAlign: 'middle' }} /> Powerlifter
-        </button>
-      </div>
-
-      {tab === 'exercise' && (
+      {circles.length === 0 ? (
+        <div className="card empty-state">
+          <Users size={48} />
+          <h3>Join a circle first</h3>
+          <p>Leaderboards are scoped to your circles. Head to the Circles tab to create or join one.</p>
+        </div>
+      ) : (
         <>
-          <div className="form-group" style={{ maxWidth: 320, marginBottom: 24 }}>
-            <label className="label">Select Exercise</label>
+          {/* Circle selector */}
+          <div className="form-group" style={{ maxWidth: 320, marginBottom: 20 }}>
+            <label className="label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Users size={14} style={{ color: 'var(--accent-cyan)' }} /> Circle
+            </label>
             <select
               className="select"
-              value={selectedExercise}
-              onChange={(e) => setSelectedExercise(e.target.value)}
+              value={selectedCircle}
+              onChange={(e) => setSelectedCircle(e.target.value)}
             >
-              {exercises.map(ex => (
-                <option key={ex.id} value={ex.id}>{ex.name}</option>
+              {circles.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
           </div>
 
-          {loading ? (
-            <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
-              <div className="spinner spinner-lg" />
-            </div>
-          ) : leaderboard.length === 0 ? (
-            <div className="card empty-state">
-              <Trophy size={48} />
-              <h3>No entries yet</h3>
-              <p>Be the first to log this exercise and claim the top spot!</p>
-            </div>
-          ) : (
-            <div className="table-wrapper animate-fade-in">
-              <table>
-                <thead>
-                  <tr>
-                    <th style={{ width: 60 }}>Rank</th>
-                    <th>Athlete</th>
-                    <th>Max Weight</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {leaderboard.map((entry, i) => (
-                    <tr key={entry.user_id} style={{ background: i < 3 ? 'rgba(0, 245, 255, 0.02)' : 'transparent' }}>
-                      <td style={{ textAlign: 'center' }}>{getRankIcon(i)}</td>
-                      <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                          {entry.avatar_url ? (
-                            <img src={entry.avatar_url} alt="" className="avatar" style={{ width: 32, height: 32 }} />
-                          ) : (
-                            <div className="avatar-placeholder" style={{ width: 32, height: 32, fontSize: 13 }}>
-                              {entry.username.charAt(0).toUpperCase()}
-                            </div>
-                          )}
-                          <span style={{ fontWeight: 500 }}>{entry.username}</span>
-                        </div>
-                      </td>
-                      <td>
-                        <span className={i < 3 ? getRankBadge(i) : ''} style={i >= 3 ? { fontWeight: 500 } : {}}>
-                          {entry.max_weight} kg
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </>
-      )}
-
-      {tab === 'powerlifter' && (
-        <>
-          <div style={{ marginBottom: 20, padding: '12px 16px', background: 'rgba(124, 58, 237, 0.06)', border: '1px solid rgba(124, 58, 237, 0.15)', borderRadius: 'var(--radius-md)', fontSize: 13, color: 'var(--text-secondary)' }}>
-            Total = max Deadlift + max Flat Barbell Bench Press + max Squat
+          {/* Tabs */}
+          <div className="tabs" style={{ maxWidth: 460 }}>
+            <button className={`tab ${tab === 'exercise' ? 'active' : ''}`} onClick={() => setTab('exercise')}>
+              <Trophy size={15} style={{ marginRight: 6, verticalAlign: 'middle' }} /> Exercise
+            </button>
+            <button className={`tab ${tab === 'powerlifter' ? 'active' : ''}`} onClick={() => setTab('powerlifter')}>
+              <Award size={15} style={{ marginRight: 6, verticalAlign: 'middle' }} /> Powerlifter
+            </button>
           </div>
 
-          {loading ? (
-            <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
-              <div className="spinner spinner-lg" />
-            </div>
-          ) : powerlifterBoard.length === 0 ? (
-            <div className="card empty-state">
-              <Award size={48} />
-              <h3>No powerlifting data yet</h3>
-              <p>Log your Deadlift, Bench Press, and Squat to appear on the board!</p>
-            </div>
-          ) : (
-            <div className="table-wrapper animate-fade-in">
-              <table>
-                <thead>
-                  <tr>
-                    <th style={{ width: 60 }}>Rank</th>
-                    <th>Athlete</th>
-                    <th>Deadlift</th>
-                    <th>Bench</th>
-                    <th>Squat</th>
-                    <th>Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {powerlifterBoard.map((entry, i) => (
-                    <tr key={entry.user_id} style={{ background: i < 3 ? 'rgba(124, 58, 237, 0.02)' : 'transparent' }}>
-                      <td style={{ textAlign: 'center' }}>{getRankIcon(i)}</td>
-                      <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                          {entry.avatar_url ? (
-                            <img src={entry.avatar_url} alt="" className="avatar" style={{ width: 32, height: 32 }} />
-                          ) : (
-                            <div className="avatar-placeholder" style={{ width: 32, height: 32, fontSize: 13 }}>
-                              {entry.username.charAt(0).toUpperCase()}
-                            </div>
-                          )}
-                          <span style={{ fontWeight: 500 }}>{entry.username}</span>
-                        </div>
-                      </td>
-                      <td>{entry.deadlift} kg</td>
-                      <td>{entry.bench} kg</td>
-                      <td>{entry.squat} kg</td>
-                      <td>
-                        <span className={i < 3 ? getRankBadge(i) : ''} style={{ fontWeight: 700, ...(i >= 3 ? {} : {}) }}>
-                          {entry.total} kg
-                        </span>
-                      </td>
-                    </tr>
+          {tab === 'exercise' && (
+            <>
+              <div className="form-group" style={{ maxWidth: 320, marginBottom: 24 }}>
+                <label className="label">Select Exercise</label>
+                <select
+                  className="select"
+                  value={selectedExercise}
+                  onChange={(e) => setSelectedExercise(e.target.value)}
+                >
+                  {exercises.map(ex => (
+                    <option key={ex.id} value={ex.id}>{ex.name}</option>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </select>
+              </div>
+
+              {loading ? (
+                <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
+                  <div className="spinner spinner-lg" />
+                </div>
+              ) : leaderboard.length === 0 ? (
+                <div className="card empty-state">
+                  <Trophy size={48} />
+                  <h3>No entries yet</h3>
+                  <p>No one in this circle has logged this exercise yet.</p>
+                </div>
+              ) : (
+                <div className="table-wrapper animate-fade-in">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th style={{ width: 60 }}>Rank</th>
+                        <th>Athlete</th>
+                        <th>Max Weight</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {leaderboard.map((entry, i) => (
+                        <tr key={entry.user_id} style={{ background: i < 3 ? 'rgba(0, 245, 255, 0.02)' : 'transparent' }}>
+                          <td style={{ textAlign: 'center' }}>{getRankIcon(i)}</td>
+                          <td>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                              {entry.avatar_url ? (
+                                <img src={entry.avatar_url} alt="" className="avatar" style={{ width: 32, height: 32 }} />
+                              ) : (
+                                <div className="avatar-placeholder" style={{ width: 32, height: 32, fontSize: 13 }}>
+                                  {entry.username.charAt(0).toUpperCase()}
+                                </div>
+                              )}
+                              <span style={{ fontWeight: 500 }}>{entry.username}</span>
+                            </div>
+                          </td>
+                          <td>
+                            <span className={i < 3 ? getRankBadge(i) : ''} style={i >= 3 ? { fontWeight: 500 } : {}}>
+                              {entry.max_weight} kg
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+
+          {tab === 'powerlifter' && (
+            <>
+              <div style={{ marginBottom: 20, padding: '12px 16px', background: 'rgba(124, 58, 237, 0.06)', border: '1px solid rgba(124, 58, 237, 0.15)', borderRadius: 'var(--radius-md)', fontSize: 13, color: 'var(--text-secondary)' }}>
+                Total = max Deadlift + max Flat Barbell Bench Press + max Squat
+              </div>
+
+              {loading ? (
+                <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
+                  <div className="spinner spinner-lg" />
+                </div>
+              ) : powerlifterBoard.length === 0 ? (
+                <div className="card empty-state">
+                  <Award size={48} />
+                  <h3>No powerlifting data yet</h3>
+                  <p>No one in this circle has logged Deadlift, Bench Press, or Squat yet.</p>
+                </div>
+              ) : (
+                <div className="table-wrapper animate-fade-in">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th style={{ width: 60 }}>Rank</th>
+                        <th>Athlete</th>
+                        <th>Deadlift</th>
+                        <th>Bench</th>
+                        <th>Squat</th>
+                        <th>Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {powerlifterBoard.map((entry, i) => (
+                        <tr key={entry.user_id} style={{ background: i < 3 ? 'rgba(124, 58, 237, 0.02)' : 'transparent' }}>
+                          <td style={{ textAlign: 'center' }}>{getRankIcon(i)}</td>
+                          <td>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                              {entry.avatar_url ? (
+                                <img src={entry.avatar_url} alt="" className="avatar" style={{ width: 32, height: 32 }} />
+                              ) : (
+                                <div className="avatar-placeholder" style={{ width: 32, height: 32, fontSize: 13 }}>
+                                  {entry.username.charAt(0).toUpperCase()}
+                                </div>
+                              )}
+                              <span style={{ fontWeight: 500 }}>{entry.username}</span>
+                            </div>
+                          </td>
+                          <td>{entry.deadlift} kg</td>
+                          <td>{entry.bench} kg</td>
+                          <td>{entry.squat} kg</td>
+                          <td>
+                            <span className={i < 3 ? getRankBadge(i) : ''} style={{ fontWeight: 700 }}>
+                              {entry.total} kg
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
           )}
         </>
       )}

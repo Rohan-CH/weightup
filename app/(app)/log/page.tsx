@@ -55,8 +55,9 @@ export default function LogWorkoutPage() {
   
   // Chart related state
   const [chartsData, setChartsData] = useState<ExerciseChart[]>([]);
-  const [selectedChartExerciseId, setSelectedChartExerciseId] = useState<string>('');
-  
+  const [chartSearch, setChartSearch] = useState('');
+  const [visibleChartsCount, setVisibleChartsCount] = useState(4);
+
   const supabase = createClient();
 
   useEffect(() => {
@@ -141,12 +142,14 @@ export default function LogWorkoutPage() {
         };
       });
 
+      // Show the heaviest-lift exercise first, then alphabetical.
+      charts.sort((a, b) => {
+        if (a.exerciseId === bestLiftExerciseId) return -1;
+        if (b.exerciseId === bestLiftExerciseId) return 1;
+        return a.exerciseName.localeCompare(b.exerciseName);
+      });
+
       setChartsData(charts);
-      if (bestLiftExerciseId && !selectedChartExerciseId) {
-        setSelectedChartExerciseId(bestLiftExerciseId);
-      } else if (charts.length > 0 && !selectedChartExerciseId) {
-        setSelectedChartExerciseId(charts[0].exerciseId);
-      }
     }
     
     setLogLoading(false);
@@ -232,7 +235,10 @@ export default function LogWorkoutPage() {
     return acc;
   }, {});
 
-  const selectedChart = chartsData.find(c => c.exerciseId === selectedChartExerciseId);
+  const filteredCharts = chartsData.filter(c =>
+    c.exerciseName.toLowerCase().includes(chartSearch.toLowerCase())
+  );
+  const visibleCharts = filteredCharts.slice(0, visibleChartsCount);
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
@@ -395,57 +401,89 @@ export default function LogWorkoutPage() {
       </div>
 
       {chartsData.length > 0 && (
-        <div className="card animate-fade-in-up" style={{ marginBottom: 32, animationDelay: '0.2s' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-            <h3 style={{ fontSize: 16, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <TrendingUp size={18} style={{ color: 'var(--accent-cyan)' }} /> 
-              Progress Chart
-            </h3>
-            <select
-              className="select"
-              style={{ width: 'auto', padding: '6px 12px', fontSize: 14 }}
-              value={selectedChartExerciseId}
-              onChange={(e) => setSelectedChartExerciseId(e.target.value)}
-            >
-              {chartsData.map((chart) => (
-                <option key={chart.exerciseId} value={chart.exerciseId}>
-                  {chart.exerciseName}
-                </option>
-              ))}
-            </select>
+        <div style={{ marginBottom: 32 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+            <h2 style={{ fontSize: 20, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <TrendingUp size={20} style={{ color: 'var(--accent-cyan)' }} />
+              Progress Charts
+            </h2>
+            <div style={{ position: 'relative', minWidth: 220 }}>
+              <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <input
+                className="input"
+                style={{ paddingLeft: 36 }}
+                placeholder="Search exercises..."
+                value={chartSearch}
+                onChange={(e) => { setChartSearch(e.target.value); setVisibleChartsCount(4); }}
+              />
+            </div>
           </div>
-          
-          {selectedChart && (
-            <ResponsiveContainer width="100%" height={240}>
-              <LineChart data={selectedChart.data}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-                <XAxis
-                  dataKey="date"
-                  tick={{ fill: '#55556a', fontSize: 11 }}
-                  axisLine={{ stroke: 'rgba(255,255,255,0.06)' }}
-                  tickLine={false}
-                  tickFormatter={(v) => {
-                    const d = new Date(v);
-                    return `${d.getDate()}/${d.getMonth() + 1}`;
-                  }}
-                />
-                <YAxis
-                  tick={{ fill: '#55556a', fontSize: 11 }}
-                  axisLine={{ stroke: 'rgba(255,255,255,0.06)' }}
-                  tickLine={false}
-                  unit="kg"
-                />
-                <Tooltip content={<CustomTooltip />} />
-                <Line
-                  type="monotone"
-                  dataKey="weight"
-                  stroke="#00f5ff"
-                  strokeWidth={2}
-                  dot={{ r: 3, fill: "#00f5ff" }}
-                  activeDot={{ r: 5, stroke: "#00f5ff", strokeWidth: 2 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
+
+          {filteredCharts.length === 0 ? (
+            <div className="card empty-state">
+              <Search size={48} />
+              <h3>No matching exercises</h3>
+              <p>No logged exercises match &ldquo;{chartSearch}&rdquo;.</p>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 440px), 1fr))', gap: 20 }}>
+              {visibleCharts.map((chart, i) => (
+                <div key={chart.exerciseId} className="card animate-fade-in-up" style={{ animationDelay: `${0.05 * (i + 1)}s` }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: CHART_COLORS[i % CHART_COLORS.length], display: 'inline-block' }} />
+                    {chart.exerciseName}
+                  </h3>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <LineChart data={chart.data}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                      <XAxis
+                        dataKey="date"
+                        tick={{ fill: '#55556a', fontSize: 11 }}
+                        axisLine={{ stroke: 'rgba(255,255,255,0.06)' }}
+                        tickLine={false}
+                        tickFormatter={(v) => {
+                          const d = new Date(v);
+                          return `${d.getDate()}/${d.getMonth() + 1}`;
+                        }}
+                      />
+                      <YAxis
+                        tick={{ fill: '#55556a', fontSize: 11 }}
+                        axisLine={{ stroke: 'rgba(255,255,255,0.06)' }}
+                        tickLine={false}
+                        unit="kg"
+                      />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Line
+                        type="monotone"
+                        dataKey="weight"
+                        stroke={CHART_COLORS[i % CHART_COLORS.length]}
+                        strokeWidth={2}
+                        dot={{ r: 3, fill: CHART_COLORS[i % CHART_COLORS.length] }}
+                        activeDot={{ r: 5, stroke: CHART_COLORS[i % CHART_COLORS.length], strokeWidth: 2 }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {filteredCharts.length > visibleChartsCount && (
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 24 }}>
+              <button
+                type="button"
+                onClick={() => setVisibleChartsCount(prev => prev + 4)}
+                style={{
+                  padding: '10px 24px', fontSize: 14, borderRadius: 'var(--radius-full)',
+                  background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                  color: 'var(--text-primary)', cursor: 'pointer', transition: 'all 0.2s',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
+              >
+                Show More Charts ({filteredCharts.length - visibleChartsCount} more)
+              </button>
+            </div>
           )}
         </div>
       )}

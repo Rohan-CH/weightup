@@ -16,12 +16,15 @@ CREATE TABLE IF NOT EXISTS profiles (
 
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON profiles;
 CREATE POLICY "Public profiles are viewable by everyone"
   ON profiles FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Users can insert their own profile" ON profiles;
 CREATE POLICY "Users can insert their own profile"
   ON profiles FOR INSERT WITH CHECK (auth.uid() = id);
 
+DROP POLICY IF EXISTS "Users can update their own profile" ON profiles;
 CREATE POLICY "Users can update their own profile"
   ON profiles FOR UPDATE USING (auth.uid() = id);
 
@@ -51,9 +54,11 @@ CREATE TABLE IF NOT EXISTS exercises (
 
 ALTER TABLE exercises ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Exercises are viewable by everyone" ON exercises;
 CREATE POLICY "Exercises are viewable by everyone"
   ON exercises FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Authenticated users can insert exercises" ON exercises;
 CREATE POLICY "Authenticated users can insert exercises"
   ON exercises FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
 
@@ -70,21 +75,26 @@ CREATE TABLE IF NOT EXISTS workout_logs (
 
 ALTER TABLE workout_logs ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can view their own logs" ON workout_logs;
 CREATE POLICY "Users can view their own logs"
   ON workout_logs FOR SELECT USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can insert their own logs" ON workout_logs;
 CREATE POLICY "Users can insert their own logs"
   ON workout_logs FOR INSERT WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can update their own logs" ON workout_logs;
 CREATE POLICY "Users can update their own logs"
   ON workout_logs FOR UPDATE USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can delete their own logs" ON workout_logs;
 CREATE POLICY "Users can delete their own logs"
   ON workout_logs FOR DELETE USING (auth.uid() = user_id);
 
--- Leaderboard needs to read all logs
-CREATE POLICY "All logs viewable for leaderboard"
-  ON workout_logs FOR SELECT USING (true);
+-- NOTE: Cross-user log visibility (for circle leaderboards) is configured in
+-- circles.sql, which replaces the "Users can view their own logs" SELECT policy
+-- with a circle-members-only rule. Do NOT add a `USING (true)` policy here — it
+-- would make every user's full log history public to all signed-in users.
 
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_workout_logs_user_id ON workout_logs(user_id);

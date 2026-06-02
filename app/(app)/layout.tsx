@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   Dumbbell,
   Trophy,
+  Users,
   User,
   LogOut,
   Menu,
@@ -18,6 +19,7 @@ import './app.css';
 const navLinks = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/log', label: 'Log Workout', icon: Dumbbell },
+  { href: '/circles', label: 'Circles', icon: Users },
   { href: '/leaderboard', label: 'Leaderboard', icon: Trophy },
   { href: '/profile', label: 'Profile', icon: User },
 ];
