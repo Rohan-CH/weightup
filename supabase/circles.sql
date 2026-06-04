@@ -183,7 +183,7 @@ CREATE OR REPLACE FUNCTION public.handle_new_circle()
 RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
   INSERT INTO circle_members (circle_id, user_id, role)
-  VALUES (NEW.id, NEW.owner_id, 'owner')
+  VALUES (NEW.id, NEW.owner_id, 'admin')
   ON CONFLICT (circle_id, user_id) DO NOTHING;
   RETURN NEW;
 END;
@@ -200,6 +200,7 @@ CREATE TRIGGER on_circle_created
 -- who shares a circle with you.
 DROP POLICY IF EXISTS "All logs viewable for leaderboard" ON workout_logs;
 DROP POLICY IF EXISTS "Users can view their own logs" ON workout_logs;
+DROP POLICY IF EXISTS "View own logs or circle members' logs" ON workout_logs;
 
 CREATE POLICY "View own logs or circle members' logs"
   ON workout_logs FOR SELECT USING (

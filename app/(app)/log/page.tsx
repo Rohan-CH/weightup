@@ -428,7 +428,7 @@ export default function LogWorkoutPage() {
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 440px), 1fr))', gap: 20 }}>
               {visibleCharts.map((chart, i) => (
-                <div key={chart.exerciseId} className="card animate-fade-in-up" style={{ animationDelay: `${0.05 * (i + 1)}s` }}>
+                <div key={chart.exerciseId} className="card">
                   <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ width: 8, height: 8, borderRadius: '50%', background: CHART_COLORS[i % CHART_COLORS.length], display: 'inline-block' }} />
                     {chart.exerciseName}
@@ -503,7 +503,7 @@ export default function LogWorkoutPage() {
         </div>
       ) : (
         Object.entries(groupedLogs).map(([date, dateLogs]) => (
-          <div key={date} style={{ marginBottom: 20 }} className="animate-fade-in">
+          <div key={date} style={{ marginBottom: 20 }}>
             <h3 style={{
               fontSize: 13,
               fontWeight: 600,

@@ -14,6 +14,7 @@ import {
   Menu,
   X,
 } from 'lucide-react';
+import NotificationBell from './NotificationBell';
 import './app.css';
 
 const navLinks = [
@@ -76,13 +77,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div className="sidebar-brand">WeightUp</div>
-          <button 
-            className="mobile-close-btn" 
-            onClick={() => setSidebarOpen(false)}
-            aria-label="Close navigation"
-          >
-            <X size={20} />
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <NotificationBell />
+            <button
+              className="mobile-close-btn"
+              onClick={() => setSidebarOpen(false)}
+              aria-label="Close navigation"
+            >
+              <X size={20} />
+            </button>
+          </div>
         </div>
 
         <nav className="sidebar-nav">
