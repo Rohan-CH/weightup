@@ -116,7 +116,8 @@ function CirclesPageInner() {
   const [activeMember, setActiveMember] = useState<Member | null>(null);
   const [memberLogs, setMemberLogs] = useState<MemberLog[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
-  const [memberReactions, setMemberReactions] = useState<Record<string, { emoji: string; count: number }[]>>({});
+  const [memberRx, setMemberRx] = useState<Reaction[]>([]);
+  const [pickerLog, setPickerLog] = useState<string | null>(null);
 
   // deep-link highlight (from notification click)
   const [highlightLog, setHighlightLog] = useState<string | null>(null);
@@ -320,7 +321,8 @@ function CirclesPageInner() {
     setView('member');
     setLogsLoading(true);
     setMemberLogs([]);
-    setMemberReactions({});
+    setMemberRx([]);
+    setPickerLog(null);
     const { data } = await supabase
       .from('workout_logs')
       .select('id, weight_kg, reps, logged_at, exercises(name)')
@@ -329,27 +331,37 @@ function CirclesPageInner() {
       .order('created_at', { ascending: false });
     if (data) setMemberLogs(data as any);
 
-    // reactions on this member's logs (to orbit around the weight)
+    // reactions on this member's logs (orbit around weight + tap to react)
     if (data && data.length > 0) {
       const ids = (data as any[]).map((l) => l.id);
       const { data: rx } = await supabase
         .from('reactions')
-        .select('log_id, emoji')
+        .select('log_id, user_id, emoji')
         .in('log_id', ids);
-      if (rx) {
-        const grouped: Record<string, Record<string, number>> = {};
-        (rx as any[]).forEach((r) => {
-          grouped[r.log_id] = grouped[r.log_id] || {};
-          grouped[r.log_id][r.emoji] = (grouped[r.log_id][r.emoji] || 0) + 1;
-        });
-        const out: Record<string, { emoji: string; count: number }[]> = {};
-        Object.entries(grouped).forEach(([logId, emojis]) => {
-          out[logId] = Object.entries(emojis).map(([emoji, count]) => ({ emoji, count }));
-        });
-        setMemberReactions(out);
-      }
+      if (rx) setMemberRx(rx as any);
     }
     setLogsLoading(false);
+  };
+
+  const toggleMemberReaction = async (logId: string, emoji: string) => {
+    if (!userId) return;
+    const existing = memberRx.find(
+      (r) => r.log_id === logId && r.user_id === userId && r.emoji === emoji
+    );
+    if (existing) {
+      setMemberRx((prev) =>
+        prev.filter((r) => !(r.log_id === logId && r.user_id === userId && r.emoji === emoji))
+      );
+      await supabase
+        .from('reactions')
+        .delete()
+        .eq('log_id', logId)
+        .eq('user_id', userId)
+        .eq('emoji', emoji);
+    } else {
+      setMemberRx((prev) => [...prev, { log_id: logId, user_id: userId, emoji }]);
+      await supabase.from('reactions').insert({ log_id: logId, user_id: userId, emoji });
+    }
   };
 
   // ---- Activity feed ----
@@ -579,28 +591,61 @@ function CirclesPageInner() {
                   </thead>
                   <tbody>
                     {dateLogs.map((log) => {
-                      const rx = memberReactions[log.id];
+                      const logRx = memberRx.filter((r) => r.log_id === log.id);
+                      const distinct = Array.from(new Set(logRx.map((r) => r.emoji)));
+                      const open = pickerLog === log.id;
                       return (
                         <tr key={log.id}>
                           <td style={{ fontWeight: 500 }}>{log.exercises?.name}</td>
                           <td style={{ overflow: 'visible' }}>
-                            <span className="weight-orbit-host">
-                              <span className="badge badge-cyan">{log.weight_kg} kg</span>
-                              {rx && rx.length > 0 && (
-                                <span className="orbit" aria-hidden="true">
-                                  {rx.map((r, i) => {
-                                    const angle = (360 / rx.length) * i;
+                            <span style={{ position: 'relative', display: 'inline-block' }}>
+                              <span className="weight-orbit-host">
+                                <button
+                                  type="button"
+                                  className="badge badge-cyan"
+                                  onClick={() => setPickerLog(open ? null : log.id)}
+                                  style={{ cursor: 'pointer', border: 'none' }}
+                                  title="Tap to react"
+                                >
+                                  {log.weight_kg} kg
+                                </button>
+                                {distinct.length > 0 && (
+                                  <span className="orbit" aria-hidden="true">
+                                    {distinct.map((emoji, i) => {
+                                      const angle = (360 / distinct.length) * i;
+                                      return (
+                                        <span
+                                          key={emoji}
+                                          className="orbit-slot"
+                                          style={{ transform: `rotate(${angle}deg) translateX(34px) rotate(${-angle}deg)` }}
+                                        >
+                                          <span className="orbit-emoji">{emoji}</span>
+                                        </span>
+                                      );
+                                    })}
+                                  </span>
+                                )}
+                              </span>
+
+                              {open && (
+                                <div className="emoji-picker animate-fade-in">
+                                  {REACTION_EMOJIS.map((emoji) => {
+                                    const count = logRx.filter((r) => r.emoji === emoji).length;
+                                    const mine = logRx.some((r) => r.emoji === emoji && r.user_id === userId);
                                     return (
-                                      <span
-                                        key={r.emoji}
-                                        className="orbit-slot"
-                                        style={{ transform: `rotate(${angle}deg) translateX(34px) rotate(${-angle}deg)` }}
+                                      <button
+                                        key={emoji}
+                                        type="button"
+                                        className={`emoji-pick ${mine ? 'mine' : ''}`}
+                                        onClick={() => toggleMemberReaction(log.id, emoji)}
+                                        title={mine ? 'Tap to remove' : 'Tap to react'}
                                       >
-                                        <span className="orbit-emoji">{r.emoji}</span>
-                                      </span>
+                                        <span>{emoji}</span>
+                                        {count > 0 && <span className="emoji-count">{count}</span>}
+                                      </button>
                                     );
                                   })}
-                                </span>
+                                </div>
                               )}
                             </span>
                           </td>
@@ -613,6 +658,13 @@ function CirclesPageInner() {
               </div>
             </div>
           ))
+        )}
+
+        {pickerLog && (
+          <div
+            style={{ position: 'fixed', inset: 0, zIndex: 40 }}
+            onClick={() => setPickerLog(null)}
+          />
         )}
       </div>
     );

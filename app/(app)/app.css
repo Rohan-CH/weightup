@@ -436,3 +436,49 @@
 @media (prefers-reduced-motion: reduce) {
   .orbit, .orbit-emoji { animation: none; }
 }
+
+/* ============ EMOJI PICKER (tap weight to react) ============ */
+.emoji-picker {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 4px;
+  padding: 6px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-full);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  z-index: 50;
+}
+
+.emoji-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 5px 8px;
+  border-radius: var(--radius-full);
+  background: transparent;
+  border: 1px solid transparent;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform 0.12s, background 0.12s;
+}
+
+.emoji-pick:hover {
+  background: rgba(255, 255, 255, 0.06);
+  transform: scale(1.15);
+}
+
+.emoji-pick.mine {
+  background: rgba(0, 245, 255, 0.14);
+  border-color: var(--accent-cyan);
+}
+
+.emoji-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
