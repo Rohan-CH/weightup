@@ -117,6 +117,7 @@ export default function ProfilePage() {
     } else {
       setAvatarUrl(urlWithCacheBust);
       setMessage('Avatar updated!');
+      window.dispatchEvent(new Event('profile-updated'));
       setTimeout(() => setMessage(''), 3000);
     }
     setUploading(false);
@@ -143,6 +144,7 @@ export default function ProfilePage() {
       setError(updateError.message.includes('duplicate') ? 'Username is already taken' : updateError.message);
     } else {
       setMessage('Profile updated!');
+      window.dispatchEvent(new Event('profile-updated'));
       setTimeout(() => setMessage(''), 3000);
     }
     setSaving(false);

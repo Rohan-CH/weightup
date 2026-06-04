@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { TrendingUp, Dumbbell, Calendar, Award } from 'lucide-react';
+import { TrendingUp, TrendingDown, Dumbbell, Calendar, Award, Flame } from 'lucide-react';
 import {
   LineChart,
   Line,
@@ -23,6 +23,8 @@ interface Stats {
   uniqueExercises: number;
   bestLift: { name: string; weight: number } | null;
   thisWeekLogs: number;
+  lastWeekLogs: number;
+  streak: number;
 }
 
 interface RecentLog {
@@ -35,15 +37,68 @@ interface RecentLog {
 
 const CHART_COLORS = ['#00f5ff', '#7c3aed', '#ec4899', '#10b981', '#f59e0b'];
 
+// Animated number that counts up from 0 to `value` on mount / change.
+function CountUp({ value, suffix = '', duration = 700 }: { value: number; suffix?: string; duration?: number }) {
+  const [display, setDisplay] = useState(0);
+  const rafRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setDisplay(value);
+      return;
+    }
+    const start = performance.now();
+    const from = 0;
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 3); // easeOutCubic
+      setDisplay(Math.round(from + (value - from) * eased));
+      if (t < 1) rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [value, duration]);
+
+  return <>{display}{suffix}</>;
+}
+
+function Delta({ value, unit = '' }: { value: number; unit?: string }) {
+  if (value === 0) {
+    return <div className="stat-delta neutral">No change{unit}</div>;
+  }
+  const up = value > 0;
+  return (
+    <div className={`stat-delta ${up ? 'up' : 'down'}`}>
+      {up ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+      {up ? '+' : ''}{value}{unit} vs last week
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const [charts, setCharts] = useState<ExerciseChart[]>([]);
-  const [stats, setStats] = useState<Stats>({ totalLogs: 0, uniqueExercises: 0, bestLift: null, thisWeekLogs: 0 });
+  const [stats, setStats] = useState<Stats>({ totalLogs: 0, uniqueExercises: 0, bestLift: null, thisWeekLogs: 0, lastWeekLogs: 0, streak: 0 });
   const [recentLog, setRecentLog] = useState<RecentLog | null>(null);
   const [loading, setLoading] = useState(true);
+  const [chartHeight, setChartHeight] = useState(220);
+  const [compactAxis, setCompactAxis] = useState(false);
   const supabase = createClient();
 
   useEffect(() => {
     fetchDashboardData();
+  }, []);
+
+  useEffect(() => {
+    const onResize = () => {
+      const mobile = window.innerWidth < 520;
+      setChartHeight(mobile ? 170 : 220);
+      setCompactAxis(mobile);
+    };
+    onResize();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
   }, []);
 
   const fetchDashboardData = async () => {
@@ -73,7 +128,7 @@ export default function DashboardPage() {
           const diffMins = Math.floor(diffMs / 60000);
           const diffHours = Math.floor(diffMins / 60);
           const diffDays = Math.floor(diffHours / 24);
-          
+
           let timeAgo = 'Just now';
           if (diffDays > 0) timeAgo = `${diffDays}d ago`;
           else if (diffHours > 0) timeAgo = `${diffHours}h ago`;
@@ -148,12 +203,27 @@ export default function DashboardPage() {
       }
     });
 
-    const oneWeekAgo = new Date();
-    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-    const weekStr = oneWeekAgo.toISOString().split('T')[0];
+    const today = new Date();
+    const dayStr = (d: Date) => d.toISOString().split('T')[0];
+    const oneWeekAgo = new Date(today); oneWeekAgo.setDate(today.getDate() - 7);
+    const twoWeeksAgo = new Date(today); twoWeeksAgo.setDate(today.getDate() - 14);
+    const weekStr = dayStr(oneWeekAgo);
+    const twoWeekStr = dayStr(twoWeeksAgo);
     const thisWeekLogs = logs.filter((l: any) => l.logged_at >= weekStr).length;
+    const lastWeekLogs = logs.filter((l: any) => l.logged_at >= twoWeekStr && l.logged_at < weekStr).length;
 
-    setStats({ totalLogs: logs.length, uniqueExercises, bestLift, thisWeekLogs });
+    // Streak: consecutive active days ending today or yesterday
+    const activeDays = new Set(logs.map((l: any) => l.logged_at));
+    let streak = 0;
+    const cursor = new Date(today);
+    // allow streak to count if logged today OR yesterday (grace for not-yet-logged today)
+    if (!activeDays.has(dayStr(cursor))) cursor.setDate(cursor.getDate() - 1);
+    while (activeDays.has(dayStr(cursor))) {
+      streak++;
+      cursor.setDate(cursor.getDate() - 1);
+    }
+
+    setStats({ totalLogs: logs.length, uniqueExercises, bestLift, thisWeekLogs, lastWeekLogs, streak });
     setCharts(chartData);
     setLoading(false);
   };
@@ -186,42 +256,53 @@ export default function DashboardPage() {
 
   return (
     <div className="animate-fade-in-up">
-      <div className="page-header">
-        <h1>Dashboard</h1>
-        <p>Your training overview and progress</p>
+      <div className="page-header" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+        <div>
+          <h1>Dashboard</h1>
+          <p>Your training overview and progress</p>
+        </div>
+        {stats.streak > 0 && (
+          <div className="streak-chip" title={`${stats.streak}-day active streak`}>
+            <Flame size={16} />
+            <span><strong><CountUp value={stats.streak} /></strong> day streak</span>
+          </div>
+        )}
       </div>
 
       {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 16, marginBottom: 32 }}>
-        <div className="stat-card" style={{ animationDelay: '0.1s' }}>
+      <div className="dash-stats">
+        <div className="stat-card dash-stat" style={{ animationDelay: '0.05s' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
             <Dumbbell size={18} style={{ color: 'var(--accent-cyan)' }} />
             <span className="stat-label" style={{ margin: 0 }}>Total Logs</span>
           </div>
-          <div className="stat-value">{stats.totalLogs}</div>
+          <div className="stat-value"><CountUp value={stats.totalLogs} /></div>
+          {stats.thisWeekLogs > 0 && <div className="stat-delta up"><TrendingUp size={12} />+{stats.thisWeekLogs} this week</div>}
         </div>
-        <div className="stat-card" style={{ animationDelay: '0.2s' }}>
+        <div className="stat-card dash-stat" style={{ animationDelay: '0.1s' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
             <Calendar size={18} style={{ color: 'var(--accent-purple)' }} />
             <span className="stat-label" style={{ margin: 0 }}>This Week</span>
           </div>
-          <div className="stat-value">{stats.thisWeekLogs}</div>
+          <div className="stat-value"><CountUp value={stats.thisWeekLogs} /></div>
+          <Delta value={stats.thisWeekLogs - stats.lastWeekLogs} />
         </div>
-        <div className="stat-card" style={{ animationDelay: '0.3s' }}>
+        <div className="stat-card dash-stat" style={{ animationDelay: '0.15s' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
             <TrendingUp size={18} style={{ color: 'var(--accent-green)' }} />
             <span className="stat-label" style={{ margin: 0 }}>Exercises</span>
           </div>
-          <div className="stat-value">{stats.uniqueExercises}</div>
+          <div className="stat-value"><CountUp value={stats.uniqueExercises} /></div>
+          <div className="stat-delta neutral">{stats.uniqueExercises === 1 ? 'movement tracked' : 'movements tracked'}</div>
         </div>
-        <div className="stat-card" style={{ animationDelay: '0.4s' }}>
+        <div className="stat-card dash-stat" style={{ animationDelay: '0.2s' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
             <Award size={18} style={{ color: 'var(--accent-orange)' }} />
             <span className="stat-label" style={{ margin: 0 }}>Best Lift</span>
           </div>
-          <div className="stat-value">{stats.bestLift ? `${stats.bestLift.weight}kg` : '—'}</div>
+          <div className="stat-value">{stats.bestLift ? <><CountUp value={stats.bestLift.weight} />kg</> : '—'}</div>
           {stats.bestLift && (
-            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+            <div className="stat-delta neutral" style={{ color: 'var(--text-secondary)' }}>
               {stats.bestLift.name}
             </div>
           )}
@@ -230,7 +311,7 @@ export default function DashboardPage() {
 
       {/* Recent Activity */}
       {recentLog && (
-        <div className="card animate-fade-in-up" style={{ marginBottom: 32, animationDelay: '0.5s', display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px', background: 'linear-gradient(145deg, rgba(14, 14, 22, 0.9), rgba(20, 20, 30, 0.9))', borderLeft: '3px solid var(--accent-purple)' }}>
+        <div className="card dash-recent animate-fade-in-up" style={{ marginBottom: 32, animationDelay: '0.25s', borderLeft: '3px solid var(--accent-purple)', background: 'linear-gradient(145deg, rgba(14, 14, 22, 0.9), rgba(20, 20, 30, 0.9))' }}>
           <div>
             <h3 style={{ fontSize: 13, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--text-muted)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
               <TrendingUp size={14} style={{ color: 'var(--accent-purple)' }}/> Most Recent Community Log
@@ -239,7 +320,7 @@ export default function DashboardPage() {
               {recentLog.exerciseName} <span style={{ color: 'var(--accent-cyan)', fontWeight: 600, fontSize: 18 }}>• {recentLog.weight}kg</span>
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div className="dash-recent-user">
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-primary)' }}>{recentLog.username}</div>
               <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{recentLog.timeAgo}</div>
@@ -263,9 +344,9 @@ export default function DashboardPage() {
           <p>Start logging your workouts to see your progress charts here.</p>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 440px), 1fr))', gap: 20 }}>
+        <div className="dash-charts">
           {charts.map((chart, i) => (
-            <div key={chart.exerciseName} className="card animate-fade-in-up" style={{ animationDelay: `${0.1 * (i + 1)}s` }}>
+            <div key={chart.exerciseName} className="card dash-stat animate-fade-in-up" style={{ animationDelay: `${0.1 * (i + 1)}s` }}>
               <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{
                   width: 8, height: 8, borderRadius: '50%',
@@ -274,14 +355,15 @@ export default function DashboardPage() {
                 }} />
                 {chart.exerciseName}
               </h3>
-              <ResponsiveContainer width="100%" height={220}>
-                <LineChart data={chart.data}>
+              <ResponsiveContainer width="100%" height={chartHeight}>
+                <LineChart data={chart.data} margin={{ top: 4, right: 8, left: compactAxis ? -24 : 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
                   <XAxis
                     dataKey="date"
                     tick={{ fill: '#55556a', fontSize: 11 }}
                     axisLine={{ stroke: 'rgba(255,255,255,0.06)' }}
                     tickLine={false}
+                    minTickGap={compactAxis ? 24 : 8}
                     tickFormatter={(v) => {
                       const d = new Date(v);
                       return `${d.getDate()}/${d.getMonth() + 1}`;
@@ -291,6 +373,7 @@ export default function DashboardPage() {
                     tick={{ fill: '#55556a', fontSize: 11 }}
                     axisLine={{ stroke: 'rgba(255,255,255,0.06)' }}
                     tickLine={false}
+                    width={compactAxis ? 28 : 40}
                     unit="kg"
                   />
                   <Tooltip content={<CustomTooltip />} />
@@ -301,6 +384,9 @@ export default function DashboardPage() {
                     strokeWidth={2}
                     dot={{ r: 3, fill: CHART_COLORS[i % CHART_COLORS.length] }}
                     activeDot={{ r: 5, stroke: CHART_COLORS[i % CHART_COLORS.length], strokeWidth: 2 }}
+                    isAnimationActive
+                    animationDuration={900}
+                    animationBegin={150 * i}
                   />
                 </LineChart>
               </ResponsiveContainer>

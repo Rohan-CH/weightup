@@ -39,6 +39,38 @@
   --transition-fast: 0.15s ease;
   --transition-normal: 0.25s ease;
   --transition-slow: 0.4s ease;
+
+  --grid-line: rgba(255, 255, 255, 0.02);
+  --scrollbar-thumb: rgba(255, 255, 255, 0.1);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.2);
+}
+
+/* ============ LIGHT THEME ============ */
+:root[data-theme='light'] {
+  --bg-primary: #f3f4f8;
+  --bg-secondary: #ffffff;
+  --bg-card: rgba(255, 255, 255, 0.85);
+  --bg-card-hover: rgba(255, 255, 255, 0.97);
+  --bg-glass: rgba(0, 0, 0, 0.02);
+  --bg-input: rgba(0, 0, 0, 0.04);
+
+  --text-primary: #14141c;
+  --text-secondary: #5a5a70;
+  --text-muted: #9595a6;
+
+  --border-color: rgba(0, 0, 0, 0.09);
+  --border-glow: rgba(124, 58, 237, 0.25);
+
+  --shadow-glow: 0 0 20px rgba(124, 58, 237, 0.08);
+  --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.08);
+
+  --grid-line: rgba(0, 0, 0, 0.035);
+  --scrollbar-thumb: rgba(0, 0, 0, 0.15);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.28);
+}
+
+html {
+  transition: background 0.25s ease;
 }
 
 * {
@@ -68,11 +100,11 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--scrollbar-thumb);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--scrollbar-thumb-hover);
 }
 
 /* ============ ANIMATIONS ============ */
@@ -347,8 +379,8 @@ body {
   position: fixed;
   inset: 0;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
   background-size: 60px 60px;
   pointer-events: none;
   z-index: 0;

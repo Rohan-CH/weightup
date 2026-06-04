@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
@@ -15,6 +15,7 @@ import {
   X,
 } from 'lucide-react';
 import NotificationBell from './NotificationBell';
+import ThemeToggle from './ThemeToggle';
 import './app.css';
 
 const navLinks = [
@@ -32,24 +33,33 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const supabase = createClient();
 
+  const getUser = useCallback(async () => {
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+    if (authUser) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('username, avatar_url')
+        .eq('id', authUser.id)
+        .single();
+      setUser({
+        email: authUser.email,
+        username: profile?.username || 'User',
+        avatar_url: profile?.avatar_url,
+      });
+    }
+  }, [supabase]);
+
+  // Re-fetch on mount and whenever the route changes (e.g. returning from Profile).
   useEffect(() => {
-    const getUser = async () => {
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (authUser) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('username, avatar_url')
-          .eq('id', authUser.id)
-          .single();
-        setUser({
-          email: authUser.email,
-          username: profile?.username || 'User',
-          avatar_url: profile?.avatar_url,
-        });
-      }
-    };
     getUser();
-  }, []);
+  }, [getUser, pathname]);
+
+  // Instant update when the profile page reports a change.
+  useEffect(() => {
+    const handler = () => getUser();
+    window.addEventListener('profile-updated', handler);
+    return () => window.removeEventListener('profile-updated', handler);
+  }, [getUser]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -104,6 +114,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </nav>
 
         <div className="sidebar-footer">
+          <ThemeToggle />
           <div className="sidebar-user">
             {user?.avatar_url ? (
               <img src={user.avatar_url} alt="Avatar" className="avatar" style={{ width: 36, height: 36 }} />
