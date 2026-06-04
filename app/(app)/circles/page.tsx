@@ -27,6 +27,7 @@ interface Circle {
   join_code: string;
   created_at: string;
   role?: string;
+  members?: { username: string; avatar_url: string | null }[];
 }
 
 interface Member {
@@ -118,6 +119,7 @@ function CirclesPageInner() {
   const [logsLoading, setLogsLoading] = useState(false);
   const [memberRx, setMemberRx] = useState<Reaction[]>([]);
   const [pickerLog, setPickerLog] = useState<string | null>(null);
+  const [pickerUp, setPickerUp] = useState(false);
 
   // deep-link highlight (from notification click)
   const [highlightLog, setHighlightLog] = useState<string | null>(null);
@@ -150,6 +152,23 @@ function CirclesPageInner() {
         .filter((row: any) => row.circles)
         .map((row: any) => ({ ...row.circles, role: row.role }))
         .sort((a: Circle, b: Circle) => a.name.localeCompare(b.name));
+
+      // Pull members for each circle to render avatar bubbles on the cards.
+      const ids = list.map((c) => c.id);
+      if (ids.length > 0) {
+        const { data: mem } = await supabase
+          .from('circle_members')
+          .select('circle_id, profiles(username, avatar_url)')
+          .in('circle_id', ids);
+        const byCircle: Record<string, { username: string; avatar_url: string | null }[]> = {};
+        (mem as any[] | null)?.forEach((m) => {
+          (byCircle[m.circle_id] = byCircle[m.circle_id] || []).push({
+            username: m.profiles?.username || 'Unknown',
+            avatar_url: m.profiles?.avatar_url || null,
+          });
+        });
+        list.forEach((c) => { c.members = byCircle[c.id] || []; });
+      }
       setCircles(list);
     }
   };
@@ -603,7 +622,12 @@ function CirclesPageInner() {
                                 <button
                                   type="button"
                                   className="badge badge-cyan"
-                                  onClick={() => setPickerLog(open ? null : log.id)}
+                                  onClick={(e) => {
+                                    if (open) { setPickerLog(null); return; }
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    setPickerUp(window.innerHeight - rect.bottom < 140);
+                                    setPickerLog(log.id);
+                                  }}
                                   style={{ cursor: 'pointer', border: 'none' }}
                                   title="Tap to react"
                                 >
@@ -628,7 +652,7 @@ function CirclesPageInner() {
                               </span>
 
                               {open && (
-                                <div className="emoji-picker animate-fade-in">
+                                <div className={`emoji-picker animate-fade-in ${pickerUp ? 'up' : ''}`}>
                                   {REACTION_EMOJIS.map((emoji) => {
                                     const count = logRx.filter((r) => r.emoji === emoji).length;
                                     const mine = logRx.some((r) => r.emoji === emoji && r.user_id === userId);
@@ -1012,24 +1036,55 @@ function CirclesPageInner() {
           <p>Create your first circle above, or join one with an invite code.</p>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: 16 }}>
-          {circles.map((c) => (
-            <div key={c.id} className="card" style={{ cursor: 'pointer' }} onClick={() => openCircle(c)}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-                <div className="avatar-placeholder" style={{ width: 40, height: 40, fontSize: 16, background: 'rgba(0,245,255,0.1)', color: 'var(--accent-cyan)' }}>
-                  {c.name.charAt(0).toUpperCase()}
-                </div>
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 16 }}>{c.name}</div>
-                  {c.owner_id === userId && (
-                    <span className="badge badge-gold" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
-                      <Crown size={11} /> Admin
-                    </span>
-                  )}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))', gap: 16, maxWidth: 760 }}>
+          {circles.map((c) => {
+            const mems = c.members || [];
+            const shown = mems.slice(0, 6);
+            const extra = mems.length - shown.length;
+            return (
+              <div key={c.id} className="card circle-card" style={{ cursor: 'pointer' }} onClick={() => openCircle(c)}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  {/* member bubbles around the circle initial */}
+                  <div className="circle-bubbles" aria-hidden="true">
+                    <div className="circle-bubble-center">{c.name.charAt(0).toUpperCase()}</div>
+                    {shown.map((m, i) => {
+                      const angle = (360 / Math.max(shown.length, 1)) * i - 90;
+                      const rad = (angle * Math.PI) / 180;
+                      const r = 36;
+                      const x = Math.cos(rad) * r;
+                      const y = Math.sin(rad) * r;
+                      return (
+                        <div
+                          key={i}
+                          className="circle-bubble"
+                          style={{ left: `calc(50% + ${x}px)`, top: `calc(50% + ${y}px)` }}
+                          title={m.username}
+                        >
+                          {m.avatar_url ? (
+                            <img src={m.avatar_url} alt="" />
+                          ) : (
+                            <span>{m.username.charAt(0).toUpperCase()}</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 16 }}>{c.name}</div>
+                    <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
+                      {mems.length} member{mems.length === 1 ? '' : 's'}{extra > 0 ? ` · +${extra} more` : ''}
+                    </div>
+                    {c.owner_id === userId && (
+                      <span className="badge badge-gold" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 8 }}>
+                        <Crown size={11} /> Admin
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
