@@ -525,11 +525,26 @@
   z-index: 2;
 }
 
-.circle-bubble {
+.circle-bubble-ring {
   position: absolute;
-  transform: translate(-50%, -50%);
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  animation: orbit-spin 12s linear infinite;
+}
+
+.circle-bubble-slot {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.circle-bubble {
   width: 26px;
   height: 26px;
+  margin-left: -13px;
+  margin-top: -13px;
   border-radius: var(--radius-full);
   overflow: hidden;
   background: var(--bg-primary);
@@ -540,10 +555,15 @@
   font-size: 11px;
   font-weight: 700;
   color: var(--text-secondary);
+  animation: orbit-spin-rev 12s linear infinite;
 }
 
 .circle-bubble img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .circle-bubble-ring, .circle-bubble { animation: none; }
 }

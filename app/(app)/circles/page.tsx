@@ -1044,30 +1044,29 @@ function CirclesPageInner() {
             return (
               <div key={c.id} className="card circle-card" style={{ cursor: 'pointer' }} onClick={() => openCircle(c)}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                  {/* member bubbles around the circle initial */}
+                  {/* member bubbles spinning around the circle initial */}
                   <div className="circle-bubbles" aria-hidden="true">
                     <div className="circle-bubble-center">{c.name.charAt(0).toUpperCase()}</div>
-                    {shown.map((m, i) => {
-                      const angle = (360 / Math.max(shown.length, 1)) * i - 90;
-                      const rad = (angle * Math.PI) / 180;
-                      const r = 36;
-                      const x = Math.cos(rad) * r;
-                      const y = Math.sin(rad) * r;
-                      return (
-                        <div
-                          key={i}
-                          className="circle-bubble"
-                          style={{ left: `calc(50% + ${x}px)`, top: `calc(50% + ${y}px)` }}
-                          title={m.username}
-                        >
-                          {m.avatar_url ? (
-                            <img src={m.avatar_url} alt="" />
-                          ) : (
-                            <span>{m.username.charAt(0).toUpperCase()}</span>
-                          )}
-                        </div>
-                      );
-                    })}
+                    <div className="circle-bubble-ring">
+                      {shown.map((m, i) => {
+                        const angle = (360 / Math.max(shown.length, 1)) * i;
+                        return (
+                          <div
+                            key={i}
+                            className="circle-bubble-slot"
+                            style={{ transform: `rotate(${angle}deg) translateX(36px) rotate(${-angle}deg)` }}
+                          >
+                            <div className="circle-bubble" title={m.username}>
+                              {m.avatar_url ? (
+                                <img src={m.avatar_url} alt="" />
+                              ) : (
+                                <span>{m.username.charAt(0).toUpperCase()}</span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
 
                   <div style={{ flex: 1, minWidth: 0 }}>
