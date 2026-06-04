@@ -52,6 +52,8 @@ export default function LogWorkoutPage() {
   const [newExerciseName, setNewExerciseName] = useState('');
   const [showNewExercise, setShowNewExercise] = useState(false);
   const [visibleLogsCount, setVisibleLogsCount] = useState(10);
+  // emoji reactions left by circle members, keyed by log id
+  const [reactions, setReactions] = useState<Record<string, { emoji: string; count: number }[]>>({});
   
   // Chart related state
   const [chartsData, setChartsData] = useState<ExerciseChart[]>([]);
@@ -96,6 +98,27 @@ export default function LogWorkoutPage() {
       .order('created_at', { ascending: false });
 
     if (data) setLogs(data as any);
+
+    // Fetch reactions circle members left on these logs
+    if (data && data.length > 0) {
+      const logIds = data.map((l: any) => l.id);
+      const { data: rxData } = await supabase
+        .from('reactions')
+        .select('log_id, emoji')
+        .in('log_id', logIds);
+      if (rxData) {
+        const grouped: Record<string, Record<string, number>> = {};
+        rxData.forEach((r: any) => {
+          grouped[r.log_id] = grouped[r.log_id] || {};
+          grouped[r.log_id][r.emoji] = (grouped[r.log_id][r.emoji] || 0) + 1;
+        });
+        const out: Record<string, { emoji: string; count: number }[]> = {};
+        Object.entries(grouped).forEach(([logId, emojis]) => {
+          out[logId] = Object.entries(emojis).map(([emoji, count]) => ({ emoji, count }));
+        });
+        setReactions(out);
+      }
+    }
 
     // Fetch all logs to build charts and find best lift
     const { data: allLogs } = await supabase
@@ -529,7 +552,31 @@ export default function LogWorkoutPage() {
                     <tr key={log.id}>
                       <td style={{ fontWeight: 500 }}>{log.exercises?.name}</td>
                       <td>
-                        <span className="badge badge-cyan">{log.weight_kg} kg</span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <span className="badge badge-cyan">{log.weight_kg} kg</span>
+                          {reactions[log.id]?.map((r) => (
+                            <span
+                              key={r.emoji}
+                              title={`${r.count} reaction${r.count > 1 ? 's' : ''}`}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 3,
+                                padding: '2px 8px',
+                                borderRadius: 'var(--radius-full)',
+                                background: 'rgba(124, 58, 237, 0.12)',
+                                border: '1px solid rgba(124, 58, 237, 0.3)',
+                                fontSize: 13,
+                                lineHeight: 1,
+                              }}
+                            >
+                              <span>{r.emoji}</span>
+                              {r.count > 1 && (
+                                <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600 }}>{r.count}</span>
+                              )}
+                            </span>
+                          ))}
+                        </span>
                       </td>
                       <td>
                         <span className="badge badge-purple">{log.reps} reps</span>
