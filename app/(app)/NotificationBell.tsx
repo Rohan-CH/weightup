@@ -107,7 +107,11 @@ export default function NotificationBell() {
   const handleClick = async (n: Notification) => {
     if (!n.read) await markRead(n.id);
     setOpen(false);
-    router.push('/circles');
+    if (n.log_id) {
+      router.push(`/circles?log=${n.log_id}`);
+    } else {
+      router.push('/circles');
+    }
   };
 
   const goToInvites = () => {

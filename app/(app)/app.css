@@ -261,8 +261,8 @@
 .notif-dropdown {
   position: absolute;
   top: calc(100% + 8px);
-  right: 0;
-  width: 320px;
+  left: 0;
+  width: 300px;
   max-width: calc(100vw - 32px);
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
@@ -270,6 +270,14 @@
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
   z-index: 200;
   overflow: hidden;
+}
+
+/* On mobile the bell sits at the right of the open sidebar, so anchor right. */
+@media (max-width: 768px) {
+  .notif-dropdown {
+    left: auto;
+    right: 0;
+  }
 }
 
 .notif-head {
@@ -376,4 +384,55 @@
   margin-top: 6px;
   border-radius: var(--radius-full);
   background: var(--accent-cyan);
+}
+
+/* ============ REACTION ORBIT (member weights) ============ */
+.weight-orbit-host {
+  position: relative;
+  display: inline-block;
+  /* room for the orbiting emojis so they aren't clipped */
+  margin: 8px 34px;
+}
+
+.orbit {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  animation: orbit-spin 9s linear infinite;
+}
+
+.orbit-slot {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.orbit-emoji {
+  display: block;
+  width: 18px;
+  height: 18px;
+  margin-left: -9px;
+  margin-top: -9px;
+  line-height: 18px;
+  text-align: center;
+  font-size: 14px;
+  animation: orbit-spin-rev 9s linear infinite;
+  filter: drop-shadow(0 0 3px rgba(0, 245, 255, 0.45));
+}
+
+@keyframes orbit-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes orbit-spin-rev {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(-360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orbit, .orbit-emoji { animation: none; }
 }

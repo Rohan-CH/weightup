@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import {
   Users,
@@ -78,8 +79,10 @@ type View = 'list' | 'circle' | 'member';
 
 const REACTION_EMOJIS = ['👍🏽', '😮‍💨', '🙄', '😱', '🤧'];
 
-export default function CirclesPage() {
+function CirclesPageInner() {
   const supabase = createClient();
+  const searchParams = useSearchParams();
+  const logParam = searchParams.get('log');
 
   const [userId, setUserId] = useState<string | null>(null);
   const [view, setView] = useState<View>('list');
@@ -113,6 +116,10 @@ export default function CirclesPage() {
   const [activeMember, setActiveMember] = useState<Member | null>(null);
   const [memberLogs, setMemberLogs] = useState<MemberLog[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
+  const [memberReactions, setMemberReactions] = useState<Record<string, { emoji: string; count: number }[]>>({});
+
+  // deep-link highlight (from notification click)
+  const [highlightLog, setHighlightLog] = useState<string | null>(null);
 
   useEffect(() => {
     init();
@@ -313,6 +320,7 @@ export default function CirclesPage() {
     setView('member');
     setLogsLoading(true);
     setMemberLogs([]);
+    setMemberReactions({});
     const { data } = await supabase
       .from('workout_logs')
       .select('id, weight_kg, reps, logged_at, exercises(name)')
@@ -320,6 +328,27 @@ export default function CirclesPage() {
       .order('logged_at', { ascending: false })
       .order('created_at', { ascending: false });
     if (data) setMemberLogs(data as any);
+
+    // reactions on this member's logs (to orbit around the weight)
+    if (data && data.length > 0) {
+      const ids = (data as any[]).map((l) => l.id);
+      const { data: rx } = await supabase
+        .from('reactions')
+        .select('log_id, emoji')
+        .in('log_id', ids);
+      if (rx) {
+        const grouped: Record<string, Record<string, number>> = {};
+        (rx as any[]).forEach((r) => {
+          grouped[r.log_id] = grouped[r.log_id] || {};
+          grouped[r.log_id][r.emoji] = (grouped[r.log_id][r.emoji] || 0) + 1;
+        });
+        const out: Record<string, { emoji: string; count: number }[]> = {};
+        Object.entries(grouped).forEach(([logId, emojis]) => {
+          out[logId] = Object.entries(emojis).map(([emoji, count]) => ({ emoji, count }));
+        });
+        setMemberReactions(out);
+      }
+    }
     setLogsLoading(false);
   };
 
@@ -379,6 +408,13 @@ export default function CirclesPage() {
     if (view === 'circle' && circleTab === 'activity') loadFeed();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, circleTab, members]);
+
+  // Scroll the highlighted log into view once the feed has loaded.
+  useEffect(() => {
+    if (!highlightLog || feedLoading || feed.length === 0) return;
+    const el = document.getElementById(`feedlog-${highlightLog}`);
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [highlightLog, feedLoading, feed]);
 
   const toggleReaction = async (logId: string, emoji: string) => {
     if (!userId) return;
@@ -449,6 +485,40 @@ export default function CirclesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, userId]);
 
+  // Handle ?log=ID deep links from notification clicks -> open that log's
+  // circle activity feed and highlight it.
+  useEffect(() => {
+    if (loading || !userId || circles.length === 0) return;
+    const logId = logParam;
+    if (!logId) return;
+    (async () => {
+      const { data: log } = await supabase
+        .from('workout_logs')
+        .select('user_id')
+        .eq('id', logId)
+        .single();
+      const ownerId = (log as any)?.user_id;
+      if (ownerId) {
+        const circleIds = circles.map((c) => c.id);
+        const { data: mem } = await supabase
+          .from('circle_members')
+          .select('circle_id')
+          .eq('user_id', ownerId)
+          .in('circle_id', circleIds);
+        const targetId = (mem as any)?.[0]?.circle_id;
+        const target = circles.find((c) => c.id === targetId) || circles[0];
+        if (target) {
+          await openCircle(target);
+          setCircleTab('activity');
+          setHighlightLog(logId);
+          setTimeout(() => setHighlightLog(null), 4000);
+        }
+      }
+      window.history.replaceState({}, '', '/circles');
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, userId, circles, logParam]);
+
   if (loading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
@@ -508,13 +578,36 @@ export default function CirclesPage() {
                     <tr><th>Exercise</th><th>Weight</th><th>Reps</th></tr>
                   </thead>
                   <tbody>
-                    {dateLogs.map((log) => (
-                      <tr key={log.id}>
-                        <td style={{ fontWeight: 500 }}>{log.exercises?.name}</td>
-                        <td><span className="badge badge-cyan">{log.weight_kg} kg</span></td>
-                        <td><span className="badge badge-purple">{log.reps} reps</span></td>
-                      </tr>
-                    ))}
+                    {dateLogs.map((log) => {
+                      const rx = memberReactions[log.id];
+                      return (
+                        <tr key={log.id}>
+                          <td style={{ fontWeight: 500 }}>{log.exercises?.name}</td>
+                          <td style={{ overflow: 'visible' }}>
+                            <span className="weight-orbit-host">
+                              <span className="badge badge-cyan">{log.weight_kg} kg</span>
+                              {rx && rx.length > 0 && (
+                                <span className="orbit" aria-hidden="true">
+                                  {rx.map((r, i) => {
+                                    const angle = (360 / rx.length) * i;
+                                    return (
+                                      <span
+                                        key={r.emoji}
+                                        className="orbit-slot"
+                                        style={{ transform: `rotate(${angle}deg) translateX(34px) rotate(${-angle}deg)` }}
+                                      >
+                                        <span className="orbit-emoji">{r.emoji}</span>
+                                      </span>
+                                    );
+                                  })}
+                                </span>
+                              )}
+                            </span>
+                          </td>
+                          <td><span className="badge badge-purple">{log.reps} reps</span></td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -685,8 +778,14 @@ export default function CirclesPage() {
                 {feed.map((log) => {
                   const logReactions = reactions.filter((r) => r.log_id === log.id);
                   const logComments = comments.filter((c) => c.log_id === log.id);
+                  const highlighted = highlightLog === log.id;
                   return (
-                    <div key={log.id} className="card">
+                    <div
+                      key={log.id}
+                      id={`feedlog-${log.id}`}
+                      className="card"
+                      style={highlighted ? { boxShadow: '0 0 0 2px var(--accent-cyan)', transition: 'box-shadow 0.3s' } : undefined}
+                    >
                       {/* header */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
                         {log.avatar_url ? (
@@ -882,5 +981,19 @@ export default function CirclesPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function CirclesPage() {
+  return (
+    <Suspense
+      fallback={
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
+          <div className="spinner spinner-lg" />
+        </div>
+      }
+    >
+      <CirclesPageInner />
+    </Suspense>
   );
 }
