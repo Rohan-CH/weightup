@@ -41,7 +41,7 @@ const MUSCLE_META: Record<MuscleKey, { label: string; color: string; view: 'fron
 const HIGHLIGHTER_MAP: Record<MuscleKey, string[]> = {
   chest: ['chest'],
   front_delts: ['front-deltoids'],
-  side_delts: ['front-deltoids', 'back-deltoids'],
+  side_delts: ['back-deltoids'],
   rear_delts: ['back-deltoids'],
   traps: ['trapezius'],
   lats: ['upper-back'],
@@ -50,11 +50,11 @@ const HIGHLIGHTER_MAP: Record<MuscleKey, string[]> = {
   biceps: ['biceps'],
   triceps: ['triceps'],
   forearms: ['forearm'],
-  abs: ['abs'],
+  abs: ['abs', 'obliques'],
   glutes: ['gluteal'],
-  quads: ['quadriceps'],
+  quads: ['quadriceps', 'adductor'],
   hamstrings: ['hamstring'],
-  calves: ['calves'],
+  calves: ['calves', 'left-soleus', 'right-soleus'],
 };
 
 // Convert hex to rgba to support opacity
@@ -357,43 +357,54 @@ export default function MusclesPage() {
         <>
           {/* Body diagram + muscle detail panel */}
           <div className="muscles-layout">
-            {/* SVG diagrams */}
             {(() => {
               const keys = Object.keys(MUSCLE_META) as MuscleKey[];
               
-              // Every muscle gets a unique frequency (index+1) so it maps to its own color slot
-              const data = keys.map((k, i) => ({
-                name: k,
-                muscles: HIGHLIGHTER_MAP[k] as any[],
-                frequency: i + 1
-              }));
+              // Build per-slug data: each library slug gets exactly one entry
+              // to avoid frequency accumulation when multiple MuscleKeys share a slug
+              const slugColor: Record<string, string> = {};
+              const slugName: Record<string, MuscleKey> = {};
               
-              // Build color array: index i = color for muscle with frequency i+1
-              // Worked/selected muscles get their color, unworked get transparent
-              const highlightedColors = keys.map(k => {
+              for (const k of keys) {
                 const isSelected = selected === k;
                 const sets = muscleWork[k] ?? 0;
                 const baseColor = MUSCLE_META[k].color;
-                if (isSelected) return hexToRgba(baseColor, 1);
-                if (sets > 0) return hexToRgba(baseColor, 0.55);
-                return 'rgba(255,255,255,0.12)'; // match bodyColor — no gaps in silhouette
-              });
+                const color = isSelected
+                  ? hexToRgba(baseColor, 1)
+                  : sets > 0
+                    ? hexToRgba(baseColor, 0.55)
+                    : 'rgba(255,255,255,0.12)';
+                
+                for (const slug of HIGHLIGHTER_MAP[k]) {
+                  // Higher priority wins: selected > worked > unworked
+                  if (!slugColor[slug] || isSelected || (sets > 0 && slugColor[slug] === 'rgba(255,255,255,0.12)')) {
+                    slugColor[slug] = color;
+                    slugName[slug] = k;
+                  }
+                }
+              }
               
-              // Reverse-map react-body-highlighter muscle slugs back to our MuscleKey
+              const slugs = Object.keys(slugColor);
+              // Each slug gets frequency = index+1 → maps to highlightedColors[index]
+              const data = slugs.map((slug, i) => ({
+                name: slugName[slug],
+                muscles: [slug] as any[],
+                frequency: i + 1
+              }));
+              const highlightedColors = slugs.map(slug => slugColor[slug]);
+              
+              // Reverse-map for click handling
               const reverseMap: Record<string, MuscleKey> = {};
               for (const k of keys) {
                 for (const slug of HIGHLIGHTER_MAP[k]) {
-                  reverseMap[slug] = k;
+                  if (!reverseMap[slug]) reverseMap[slug] = k;
                 }
               }
               
               const handleClick = (ex: any) => {
-                // ex.muscle is the react-body-highlighter slug like 'chest', 'front-deltoids'
                 const slug = ex.muscle as string;
                 const k = reverseMap[slug];
-                if (k) {
-                  setSelected(s => s === k ? null : k);
-                }
+                if (k) setSelected(s => s === k ? null : k);
               };
               
               return (
