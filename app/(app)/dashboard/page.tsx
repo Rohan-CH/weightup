@@ -219,7 +219,12 @@ export default function DashboardPage() {
     logs.forEach((l: any) => { if (!bestLift || l.weight_kg > bestLift.weight) bestLift = { name: l.exercises?.name || 'Unknown', weight: l.weight_kg }; });
 
     const today = new Date();
-    const dayStr = (d: Date) => d.toISOString().split('T')[0];
+    const dayStr = (d: Date) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
     const oneWeekAgo = new Date(today); oneWeekAgo.setDate(today.getDate() - 7);
     const twoWeeksAgo = new Date(today); twoWeeksAgo.setDate(today.getDate() - 14);
     const thisWeekLogs = logs.filter((l: any) => l.logged_at >= dayStr(oneWeekAgo)).length;

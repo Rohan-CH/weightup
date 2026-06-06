@@ -327,7 +327,10 @@ function getWeekStart(date: Date): Date {
 }
 
 function dayStr(d: Date) {
-  return d.toISOString().split('T')[0];
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 function formatWeekRange(start: Date): string {
@@ -389,7 +392,7 @@ export default function MusclesPage() {
 
       const { data } = await supabase
         .from('workout_logs')
-        .select('id, exercise_id, logged_at, weight_kg, reps, sets, exercises(name)')
+        .select('id, exercise_id, logged_at, weight_kg, reps, exercises(name)')
         .eq('user_id', user.id)
         .gte('logged_at', dayStr(weekStart))
         .lte('logged_at', dayStr(weekEnd))
