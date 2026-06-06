@@ -84,8 +84,20 @@ export default function MusclesPage() {
   const [selected, setSelected] = useState<MuscleKey | null>(null);
   const [showCalendar, setShowCalendar] = useState(false);
   const [activeWeeks, setActiveWeeks] = useState<Set<string>>(new Set());
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const router = useRouter();
   const supabase = createClient();
+
+  useEffect(() => {
+    const checkTheme = () => {
+      const isL = document.documentElement.getAttribute('data-theme') === 'light';
+      setTheme(isL ? 'light' : 'dark');
+    };
+    checkTheme();
+    const observer = new MutationObserver(checkTheme);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     async function fetchActiveWeeks() {
@@ -248,11 +260,14 @@ export default function MusclesPage() {
                   ? hexToRgba(baseColor, 1)
                   : sets > 0
                     ? hexToRgba(baseColor, 0.55)
-                    : 'rgba(255,255,255,0.12)';
+                    : theme === 'light'
+                      ? 'rgba(0,0,0,0.06)'
+                      : 'rgba(255,255,255,0.12)';
                 
                 for (const slug of HIGHLIGHTER_MAP[k]) {
+                  const unworkedColor = theme === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.12)';
                   // Higher priority wins: selected > worked > unworked
-                  if (!slugColor[slug] || isSelected || (sets > 0 && slugColor[slug] === 'rgba(255,255,255,0.12)')) {
+                  if (!slugColor[slug] || isSelected || (sets > 0 && slugColor[slug] === unworkedColor)) {
                     slugColor[slug] = color;
                     slugName[slug] = k;
                   }

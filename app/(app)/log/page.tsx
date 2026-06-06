@@ -276,14 +276,15 @@ export default function LogWorkoutPage() {
     if (active && payload && payload.length) {
       return (
         <div style={{
-          background: 'rgba(14, 14, 22, 0.95)',
-          border: '1px solid rgba(0, 245, 255, 0.15)',
+          background: 'var(--bg-secondary)',
+          border: '1px solid var(--border-color)',
           borderRadius: 8,
           padding: '10px 14px',
           fontSize: 13,
+          boxShadow: 'var(--shadow-card)',
         }}>
-          <p style={{ color: '#8888a0', marginBottom: 4 }}>{label}</p>
-          <p style={{ color: '#00f5ff', fontWeight: 600 }}>{payload[0].value} kg</p>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: 4 }}>{label}</p>
+          <p style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{payload[0].value} kg</p>
         </div>
       );
     }
@@ -342,7 +343,7 @@ export default function LogWorkoutPage() {
                       borderBottom: '1px solid var(--border-color)',
                       transition: 'background 0.15s',
                     }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.04)')}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-input)')}
                     onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                   >
                     {ex.name}
@@ -577,11 +578,11 @@ export default function LogWorkoutPage() {
                 onClick={() => setVisibleChartsCount(prev => prev + 4)}
                 style={{
                   padding: '10px 24px', fontSize: 14, borderRadius: 'var(--radius-full)',
-                  background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                  background: 'var(--bg-input)', border: '1px solid var(--border-color)',
                   color: 'var(--text-primary)', cursor: 'pointer', transition: 'all 0.2s',
                 }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-card-hover)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-input)'; }}
               >
                 Show More Charts ({filteredCharts.length - visibleChartsCount} more)
               </button>
@@ -630,31 +631,31 @@ export default function LogWorkoutPage() {
                   {dateLogs.map((log) => (
                     <tr key={log.id}>
                       <td style={{ fontWeight: 500 }}>{log.exercises?.name}</td>
-                      <td>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                          <span className="badge badge-cyan">{log.weight_kg} kg</span>
-                          {reactions[log.id]?.map((r) => (
-                            <span
-                              key={r.emoji}
-                              title={`${r.count} reaction${r.count > 1 ? 's' : ''}`}
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 3,
-                                padding: '2px 8px',
-                                borderRadius: 'var(--radius-full)',
-                                background: 'rgba(124, 58, 237, 0.12)',
-                                border: '1px solid rgba(124, 58, 237, 0.3)',
-                                fontSize: 13,
-                                lineHeight: 1,
-                              }}
-                            >
-                              <span>{r.emoji}</span>
-                              {r.count > 1 && (
-                                <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600 }}>{r.count}</span>
-                              )}
-                            </span>
-                          ))}
+                      <td style={{ overflow: 'visible' }}>
+                        <span style={{ position: 'relative', display: 'inline-block' }}>
+                          <span className="weight-orbit-host">
+                            <span className="badge badge-cyan">{log.weight_kg} kg</span>
+                            {(() => {
+                              const distinct = (reactions[log.id] || []).map((r) => r.emoji);
+                              if (distinct.length === 0) return null;
+                              return (
+                                <span className="orbit" aria-hidden="true">
+                                  {distinct.map((emoji, i) => {
+                                    const angle = (360 / distinct.length) * i;
+                                    return (
+                                      <span
+                                        key={emoji}
+                                        className="orbit-slot"
+                                        style={{ transform: `rotate(${angle}deg) translateX(34px) rotate(${-angle}deg)` }}
+                                      >
+                                        <span className="orbit-emoji">{emoji}</span>
+                                      </span>
+                                    );
+                                  })}
+                                </span>
+                              );
+                            })()}
+                          </span>
                         </span>
                       </td>
                       <td>
@@ -683,17 +684,17 @@ export default function LogWorkoutPage() {
               padding: '10px 24px', 
               fontSize: 14, 
               borderRadius: 'var(--radius-full)',
-              background: 'rgba(255,255,255,0.05)',
-              border: '1px solid rgba(255,255,255,0.1)',
+              background: 'var(--bg-input)',
+              border: '1px solid var(--border-color)',
               color: 'var(--text-primary)',
               cursor: 'pointer',
               transition: 'all 0.2s'
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
+              e.currentTarget.style.background = 'var(--bg-card-hover)';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+              e.currentTarget.style.background = 'var(--bg-input)';
             }}
           >
             Show More

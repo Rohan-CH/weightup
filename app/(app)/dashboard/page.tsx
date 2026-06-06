@@ -147,11 +147,22 @@ export default function DashboardPage() {
   const [logSubmitting, setLogSubmitting] = useState(false);
   const [logError, setLogError] = useState('');
   const [logSuccess, setLogSuccess] = useState('');
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const router = useRouter();
   const supabase = createClient();
   const { ripples: bestRipples, trigger: triggerBest } = useRipple();
 
-  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    setMounted(true);
+    const checkTheme = () => {
+      const isL = document.documentElement.getAttribute('data-theme') === 'light';
+      setTheme(isL ? 'light' : 'dark');
+    };
+    checkTheme();
+    const observer = new MutationObserver(checkTheme);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     fetchDashboardData();
@@ -319,9 +330,16 @@ export default function DashboardPage() {
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       return (
-        <div style={{ background: 'rgba(10,10,18,0.97)', border: '1px solid rgba(0,245,255,0.15)', borderRadius: 8, padding: '10px 14px', fontSize: 13 }}>
-          <p style={{ color: '#8888a0', marginBottom: 4 }}>{label}</p>
-          <p style={{ color: '#00f5ff', fontWeight: 700 }}>{payload[0].value} kg</p>
+        <div style={{
+          background: 'var(--bg-secondary)',
+          border: '1px solid var(--border-color)',
+          borderRadius: 8,
+          padding: '10px 14px',
+          fontSize: 13,
+          boxShadow: 'var(--shadow-card)',
+        }}>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: 4 }}>{label}</p>
+          <p style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{payload[0].value} kg</p>
         </div>
       );
     }
@@ -471,7 +489,9 @@ export default function DashboardPage() {
         marginBottom: 28,
         animationDelay: '0.22s',
         border: '1px solid rgba(0, 245, 255, 0.12)',
-        background: 'linear-gradient(135deg, rgba(14, 14, 22, 0.8), rgba(20, 20, 30, 0.8))',
+        background: theme === 'light'
+          ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(245, 245, 250, 0.9))'
+          : 'linear-gradient(135deg, rgba(14, 14, 22, 0.8), rgba(20, 20, 30, 0.8))',
         padding: 24,
         borderRadius: 'var(--radius-lg)',
       }}>
@@ -591,7 +611,17 @@ export default function DashboardPage() {
       {recentLog && (
         <button
           className="card dash-recent dash-stat-btn animate-fade-in-up"
-          style={{ width: '100%', marginBottom: 28, animationDelay: '0.25s', borderLeft: '3px solid var(--accent-purple)', background: 'linear-gradient(145deg, rgba(14,14,22,0.9), rgba(20,20,30,0.9))', textAlign: 'left', cursor: 'pointer' }}
+          style={{
+            width: '100%',
+            marginBottom: 28,
+            animationDelay: '0.25s',
+            borderLeft: '3px solid var(--accent-purple)',
+            background: theme === 'light'
+              ? 'linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(245, 245, 250, 0.9))'
+              : 'linear-gradient(145deg, rgba(14, 14, 22, 0.9), rgba(20, 20, 30, 0.9))',
+            textAlign: 'left',
+            cursor: 'pointer'
+          }}
           onClick={() => router.push('/circles')}
           title="View in Circles"
         >
