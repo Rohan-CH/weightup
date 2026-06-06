@@ -624,7 +624,7 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
   gap: 16px;
-  margin-bottom: 32px;
+  margin-bottom: 28px;
 }
 
 .dash-charts {
@@ -651,6 +651,45 @@
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
 }
 
+/* Clickable stat card */
+.dash-stat-btn {
+  cursor: pointer;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 20px 24px;
+  font-family: var(--font-family);
+  color: var(--text-primary);
+  transition: transform 0.15s ease, border-color 0.2s ease, box-shadow 0.2s ease, background 0.15s ease;
+}
+
+.dash-stat-btn:hover {
+  transform: translateY(-2px);
+  border-color: rgba(0, 245, 255, 0.3);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.3);
+  background: var(--bg-card-hover);
+}
+
+.dash-stat-btn:active {
+  transform: translateY(0);
+}
+
+/* Ripple animation */
+.dash-ripple {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(0, 245, 255, 0.35);
+  transform: translate(-50%, -50%) scale(0);
+  animation: dash-ripple-anim 0.6s ease-out forwards;
+  pointer-events: none;
+}
+
+@keyframes dash-ripple-anim {
+  to { transform: translate(-50%, -50%) scale(30); opacity: 0; }
+}
+
 .stat-delta {
   display: inline-flex;
   align-items: center;
@@ -660,27 +699,76 @@
   font-weight: 600;
 }
 
-.stat-delta.up { color: var(--accent-green, #10b981); }
+.stat-delta.up   { color: var(--accent-green, #10b981); }
 .stat-delta.down { color: var(--accent-red, #ef4444); }
 .stat-delta.neutral { color: var(--text-muted); font-weight: 500; }
 
-/* Streak chip in header */
+/* Streak chip */
 .streak-chip {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   padding: 8px 14px;
   border-radius: var(--radius-full);
-  background: linear-gradient(135deg, rgba(249, 115, 22, 0.16), rgba(236, 72, 153, 0.12));
+  background: linear-gradient(135deg, rgba(249,115,22,0.16), rgba(236,72,153,0.12));
   border: 1px solid rgba(249, 115, 22, 0.35);
   color: var(--accent-orange, #f97316);
   font-size: 13px;
   white-space: nowrap;
+  font-family: var(--font-family);
+  cursor: pointer;
+  transition: all var(--transition-fast);
 }
-
+.streak-chip:hover { background: linear-gradient(135deg, rgba(249,115,22,0.24), rgba(236,72,153,0.18)); }
 .streak-chip strong { color: var(--text-primary); font-weight: 800; }
 
-/* Recent community log card */
+/* ---- Quick Actions ---- */
+.dash-quick-actions {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 28px;
+  flex-wrap: wrap;
+}
+
+.dash-quick-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-family);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex: 1;
+  min-width: 120px;
+  white-space: nowrap;
+}
+
+.dash-quick-btn:hover {
+  border-color: var(--border-glow);
+  background: var(--bg-card-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.dash-quick-btn:active { transform: translateY(0); }
+
+.dash-quick-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+/* ---- Recent Community Log ---- */
 .dash-recent {
   display: flex;
   flex-wrap: wrap;
@@ -696,19 +784,176 @@
   gap: 14px;
 }
 
-/* Phone layout */
+/* ---- Chart log button ---- */
+.dash-chart-log-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: var(--radius-full);
+  background: rgba(0, 245, 255, 0.07);
+  border: 1px solid rgba(0, 245, 255, 0.2);
+  color: var(--btn-color, var(--accent-cyan));
+  font-size: 12px;
+  font-weight: 700;
+  font-family: var(--font-family);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.dash-chart-log-btn:hover {
+  background: rgba(0, 245, 255, 0.14);
+  transform: scale(1.04);
+}
+
+/* ---- Chart meta row ---- */
+.dash-chart-meta {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.dash-chart-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.dash-chart-meta-item strong { color: var(--text-primary); }
+
+/* ---- Stat Drawer ---- */
+.dash-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 400;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: fadeIn 0.2s ease;
+}
+
+.dash-drawer {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  width: 100%;
+  max-width: 480px;
+  max-height: 80vh;
+  overflow-y: auto;
+  animation: slideUpDrawer 0.28s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+
+@keyframes slideUpDrawer {
+  from { transform: translateY(60px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+.dash-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  position: sticky;
+  top: 0;
+  background: var(--bg-secondary);
+  z-index: 1;
+}
+
+.dash-drawer-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.dash-drawer-close:hover { background: rgba(255, 255, 255, 0.08); color: var(--text-primary); }
+
+.dash-drawer-body {
+  padding: 20px 24px 32px;
+}
+
+.dash-drawer-stat-big {
+  font-size: 52px;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1;
+  margin-bottom: 12px;
+}
+
+.dash-drawer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 14px;
+}
+
+.dash-drawer-row:last-of-type { border-bottom: none; }
+
+.dash-drawer-tip {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  background: rgba(239, 68, 68, 0.06);
+  color: var(--accent-red);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.dash-drawer-exercise-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+  font-size: 14px;
+}
+
+.dash-drawer-pb-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+}
+
+/* ---- Phone layout ---- */
 @media (max-width: 520px) {
   .dash-stats {
     grid-template-columns: 1fr 1fr;
-    gap: 12px;
+    gap: 10px;
   }
   .dash-stats .dash-stat {
-    min-height: 104px;
+    min-height: 100px;
     padding: 14px;
   }
-  .dash-stats .stat-value {
-    font-size: 26px;
-  }
+  .dash-stats .stat-value { font-size: 26px; }
   .dash-charts {
     grid-template-columns: 1fr;
     gap: 14px;
@@ -722,11 +967,19 @@
     width: 100%;
     justify-content: space-between;
   }
-  .dash-recent-user > div:first-child {
-    text-align: left !important;
+  .dash-recent-user > div:first-child { text-align: left !important; }
+  .dash-quick-btn {
+    padding: 10px 12px;
+    font-size: 12px;
+    min-width: 0;
+    flex: 1 1 calc(50% - 5px);
   }
+  .dash-quick-icon { width: 26px; height: 26px; }
+  .dash-drawer-stat-big { font-size: 42px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dash-stat { transition: none; }
+  .dash-stat, .dash-stat-btn, .dash-quick-btn { transition: none; }
+  .dash-ripple { animation: none; }
 }
+

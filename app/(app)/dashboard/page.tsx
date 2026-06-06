@@ -1,21 +1,23 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { TrendingUp, TrendingDown, Dumbbell, Calendar, Award, Flame } from 'lucide-react';
 import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
+  TrendingUp, TrendingDown, Dumbbell, Calendar, Award, Flame,
+  ChevronRight, Plus, Trophy, Users, X, ArrowRight, BarChart2, Target,
+} from 'lucide-react';
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  AreaChart, Area,
 } from 'recharts';
 
 interface ExerciseChart {
   exerciseName: string;
+  exerciseId: string;
   data: { date: string; weight: number }[];
+  maxWeight: number;
+  totalSessions: number;
 }
 
 interface Stats {
@@ -35,44 +37,76 @@ interface RecentLog {
   timeAgo: string;
 }
 
+interface PersonalBest {
+  name: string;
+  weight: number;
+  reps: number | null;
+  date: string;
+}
+
 const CHART_COLORS = ['#00f5ff', '#7c3aed', '#ec4899', '#10b981', '#f59e0b'];
 
-// Animated number that counts up from 0 to `value` on mount / change.
 function CountUp({ value, suffix = '', duration = 700 }: { value: number; suffix?: string; duration?: number }) {
   const [display, setDisplay] = useState(0);
   const rafRef = useRef<number | null>(null);
-
   useEffect(() => {
     if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      setDisplay(value);
-      return;
+      setDisplay(value); return;
     }
     const start = performance.now();
-    const from = 0;
     const tick = (now: number) => {
       const t = Math.min(1, (now - start) / duration);
-      const eased = 1 - Math.pow(1 - t, 3); // easeOutCubic
-      setDisplay(Math.round(from + (value - from) * eased));
+      const eased = 1 - Math.pow(1 - t, 3);
+      setDisplay(Math.round((value) * eased));
       if (t < 1) rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
   }, [value, duration]);
-
   return <>{display}{suffix}</>;
 }
 
-function Delta({ value, unit = '' }: { value: number; unit?: string }) {
-  if (value === 0) {
-    return <div className="stat-delta neutral">No change{unit}</div>;
-  }
+function Delta({ value }: { value: number }) {
+  if (value === 0) return <div className="stat-delta neutral">Same as last week</div>;
   const up = value > 0;
   return (
     <div className={`stat-delta ${up ? 'up' : 'down'}`}>
       {up ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-      {up ? '+' : ''}{value}{unit} vs last week
+      {up ? '+' : ''}{value} vs last week
+    </div>
+  );
+}
+
+// Ripple effect hook
+function useRipple() {
+  const [ripples, setRipples] = useState<{ x: number; y: number; id: number }[]>([]);
+  const trigger = (e: React.MouseEvent<HTMLElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const id = Date.now();
+    setRipples(r => [...r, { x, y, id }]);
+    setTimeout(() => setRipples(r => r.filter(rr => rr.id !== id)), 600);
+  };
+  return { ripples, trigger };
+}
+
+// Drawer for stat card details
+function StatDrawer({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return (
+    <div className="dash-drawer-overlay" onClick={onClose}>
+      <div className="dash-drawer" onClick={e => e.stopPropagation()}>
+        <div className="dash-drawer-head">
+          <span>{title}</span>
+          <button className="dash-drawer-close" onClick={onClose}><X size={18} /></button>
+        </div>
+        <div className="dash-drawer-body">{children}</div>
+      </div>
     </div>
   );
 }
@@ -81,10 +115,14 @@ export default function DashboardPage() {
   const [charts, setCharts] = useState<ExerciseChart[]>([]);
   const [stats, setStats] = useState<Stats>({ totalLogs: 0, uniqueExercises: 0, bestLift: null, thisWeekLogs: 0, lastWeekLogs: 0, streak: 0 });
   const [recentLog, setRecentLog] = useState<RecentLog | null>(null);
+  const [personalBests, setPersonalBests] = useState<PersonalBest[]>([]);
   const [loading, setLoading] = useState(true);
-  const [chartHeight, setChartHeight] = useState(220);
+  const [chartHeight, setChartHeight] = useState(200);
   const [compactAxis, setCompactAxis] = useState(false);
+  const [openDrawer, setOpenDrawer] = useState<string | null>(null);
+  const router = useRouter();
   const supabase = createClient();
+  const { ripples: bestRipples, trigger: triggerBest } = useRipple();
 
   useEffect(() => {
     fetchDashboardData();
@@ -93,7 +131,7 @@ export default function DashboardPage() {
   useEffect(() => {
     const onResize = () => {
       const mobile = window.innerWidth < 520;
-      setChartHeight(mobile ? 170 : 220);
+      setChartHeight(mobile ? 160 : 200);
       setCompactAxis(mobile);
     };
     onResize();
@@ -105,123 +143,81 @@ export default function DashboardPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // Fetch the recent log globally
+    // Recent global log
     try {
       const { data: latestLogs } = await supabase
         .from('workout_logs')
         .select('user_id, weight_kg, created_at, exercises(name)')
         .order('created_at', { ascending: false })
         .limit(1);
-
       if (latestLogs && latestLogs.length > 0) {
-        const globalLog = latestLogs[0];
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('username, avatar_url')
-          .eq('id', globalLog.user_id)
-          .single();
-
+        const g = latestLogs[0];
+        const { data: profile } = await supabase.from('profiles').select('username, avatar_url').eq('id', g.user_id).single();
         if (profile) {
-          const date = new Date(globalLog.created_at);
-          const now = new Date();
-          const diffMs = now.getTime() - date.getTime();
-          const diffMins = Math.floor(diffMs / 60000);
-          const diffHours = Math.floor(diffMins / 60);
-          const diffDays = Math.floor(diffHours / 24);
-
-          let timeAgo = 'Just now';
-          if (diffDays > 0) timeAgo = `${diffDays}d ago`;
-          else if (diffHours > 0) timeAgo = `${diffHours}h ago`;
-          else if (diffMins > 0) timeAgo = `${diffMins}m ago`;
-
-          setRecentLog({
-            exerciseName: globalLog.exercises?.name || 'Unknown',
-            weight: globalLog.weight_kg,
-            username: profile.username || 'Unknown',
-            avatar_url: profile.avatar_url,
-            timeAgo
-          });
+          const diff = Date.now() - new Date(g.created_at).getTime();
+          const m = Math.floor(diff / 60000), h = Math.floor(m / 60), d = Math.floor(h / 24);
+          const timeAgo = d > 0 ? `${d}d ago` : h > 0 ? `${h}h ago` : m > 0 ? `${m}m ago` : 'Just now';
+          setRecentLog({ exerciseName: g.exercises?.name || 'Unknown', weight: g.weight_kg, username: profile.username || 'Unknown', avatar_url: profile.avatar_url, timeAgo });
         }
       }
-    } catch (err) {
-      console.error('Error fetching recent log:', err);
-    }
+    } catch (e) { console.error(e); }
 
-    // Get all logs for this user
+    // User logs
     const { data: logs } = await supabase
       .from('workout_logs')
       .select('*, exercises(name)')
       .eq('user_id', user.id)
       .order('logged_at', { ascending: true });
 
-    if (!logs || logs.length === 0) {
-      setLoading(false);
-      return;
-    }
+    if (!logs || logs.length === 0) { setLoading(false); return; }
 
-    // Count logs per exercise
-    const exerciseCounts: Record<string, number> = {};
-    const exerciseNames: Record<string, string> = {};
-    logs.forEach((log: any) => {
-      const eid = log.exercise_id;
-      exerciseCounts[eid] = (exerciseCounts[eid] || 0) + 1;
-      exerciseNames[eid] = log.exercises?.name || 'Unknown';
+    // Exercise counts + top 5
+    const counts: Record<string, number> = {};
+    const names: Record<string, string> = {};
+    logs.forEach((l: any) => {
+      counts[l.exercise_id] = (counts[l.exercise_id] || 0) + 1;
+      names[l.exercise_id] = l.exercises?.name || 'Unknown';
+    });
+    const top5 = Object.entries(counts).sort(([, a], [, b]) => b - a).slice(0, 5).map(([id]) => id);
+
+    // Charts + personal bests per exercise
+    const pbs: PersonalBest[] = [];
+    const chartData: ExerciseChart[] = top5.map((eid) => {
+      const exerciseLogs = logs.filter((l: any) => l.exercise_id === eid);
+      // personal best for this exercise
+      let best = exerciseLogs[0];
+      exerciseLogs.forEach((l: any) => { if (l.weight_kg > best.weight_kg) best = l; });
+      pbs.push({ name: names[eid], weight: best.weight_kg, reps: best.reps ?? null, date: best.logged_at });
+
+      const byDate = exerciseLogs.reduce((acc: Record<string, number>, l: any) => {
+        if (!acc[l.logged_at] || l.weight_kg > acc[l.logged_at]) acc[l.logged_at] = l.weight_kg;
+        return acc;
+      }, {});
+      const data = Object.entries(byDate)
+        .map(([date, weight]) => ({ date, weight: Number(weight) }))
+        .sort((a, b) => a.date.localeCompare(b.date));
+      return { exerciseName: names[eid], exerciseId: eid, data, maxWeight: best.weight_kg, totalSessions: counts[eid] };
     });
 
-    // Top 5 most logged
-    const topExercises = Object.entries(exerciseCounts)
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, 5)
-      .map(([id]) => id);
-
-    // Build chart data
-    const chartData: ExerciseChart[] = topExercises.map((eid) => {
-      const exerciseLogs = logs
-        .filter((l: any) => l.exercise_id === eid)
-        .reduce((acc: Record<string, number>, l: any) => {
-          const date = l.logged_at;
-          if (!acc[date] || l.weight_kg > acc[date]) {
-            acc[date] = l.weight_kg;
-          }
-          return acc;
-        }, {});
-
-      return {
-        exerciseName: exerciseNames[eid],
-        data: Object.entries(exerciseLogs)
-          .map(([date, weight]) => ({ date, weight: Number(weight) }))
-          .sort((a, b) => a.date.localeCompare(b.date)),
-      };
-    });
+    setPersonalBests(pbs);
 
     // Stats
     const uniqueExercises = new Set(logs.map((l: any) => l.exercise_id)).size;
     let bestLift: { name: string; weight: number } | null = null;
-    logs.forEach((l: any) => {
-      if (!bestLift || l.weight_kg > bestLift.weight) {
-        bestLift = { name: l.exercises?.name || 'Unknown', weight: l.weight_kg };
-      }
-    });
+    logs.forEach((l: any) => { if (!bestLift || l.weight_kg > bestLift.weight) bestLift = { name: l.exercises?.name || 'Unknown', weight: l.weight_kg }; });
 
     const today = new Date();
     const dayStr = (d: Date) => d.toISOString().split('T')[0];
     const oneWeekAgo = new Date(today); oneWeekAgo.setDate(today.getDate() - 7);
     const twoWeeksAgo = new Date(today); twoWeeksAgo.setDate(today.getDate() - 14);
-    const weekStr = dayStr(oneWeekAgo);
-    const twoWeekStr = dayStr(twoWeeksAgo);
-    const thisWeekLogs = logs.filter((l: any) => l.logged_at >= weekStr).length;
-    const lastWeekLogs = logs.filter((l: any) => l.logged_at >= twoWeekStr && l.logged_at < weekStr).length;
+    const thisWeekLogs = logs.filter((l: any) => l.logged_at >= dayStr(oneWeekAgo)).length;
+    const lastWeekLogs = logs.filter((l: any) => l.logged_at >= dayStr(twoWeeksAgo) && l.logged_at < dayStr(oneWeekAgo)).length;
 
-    // Streak: consecutive active days ending today or yesterday
     const activeDays = new Set(logs.map((l: any) => l.logged_at));
     let streak = 0;
     const cursor = new Date(today);
-    // allow streak to count if logged today OR yesterday (grace for not-yet-logged today)
     if (!activeDays.has(dayStr(cursor))) cursor.setDate(cursor.getDate() - 1);
-    while (activeDays.has(dayStr(cursor))) {
-      streak++;
-      cursor.setDate(cursor.getDate() - 1);
-    }
+    while (activeDays.has(dayStr(cursor))) { streak++; cursor.setDate(cursor.getDate() - 1); }
 
     setStats({ totalLogs: logs.length, uniqueExercises, bestLift, thisWeekLogs, lastWeekLogs, streak });
     setCharts(chartData);
@@ -231,15 +227,9 @@ export default function DashboardPage() {
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       return (
-        <div style={{
-          background: 'rgba(14, 14, 22, 0.95)',
-          border: '1px solid rgba(0, 245, 255, 0.15)',
-          borderRadius: 8,
-          padding: '10px 14px',
-          fontSize: 13,
-        }}>
+        <div style={{ background: 'rgba(10,10,18,0.97)', border: '1px solid rgba(0,245,255,0.15)', borderRadius: 8, padding: '10px 14px', fontSize: 13 }}>
           <p style={{ color: '#8888a0', marginBottom: 4 }}>{label}</p>
-          <p style={{ color: '#00f5ff', fontWeight: 600 }}>{payload[0].value} kg</p>
+          <p style={{ color: '#00f5ff', fontWeight: 700 }}>{payload[0].value} kg</p>
         </div>
       );
     }
@@ -254,86 +244,167 @@ export default function DashboardPage() {
     );
   }
 
+  const weekDelta = stats.thisWeekLogs - stats.lastWeekLogs;
+
   return (
     <div className="animate-fade-in-up">
+      {/* Header */}
       <div className="page-header" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
         <div>
           <h1>Dashboard</h1>
           <p>Your training overview and progress</p>
         </div>
         {stats.streak > 0 && (
-          <div className="streak-chip" title={`${stats.streak}-day active streak`}>
+          <button
+            className="streak-chip"
+            title={`${stats.streak}-day active streak — keep it going!`}
+            onClick={() => setOpenDrawer('streak')}
+            style={{ cursor: 'pointer', border: '1px solid rgba(249,115,22,0.35)' }}
+          >
             <Flame size={16} />
             <span><strong><CountUp value={stats.streak} /></strong> day streak</span>
-          </div>
+            <ChevronRight size={14} style={{ opacity: 0.6 }} />
+          </button>
         )}
       </div>
 
-      {/* Stats */}
+      {/* Quick Actions */}
+      <div className="dash-quick-actions">
+        <button className="dash-quick-btn" onClick={() => router.push('/log')}>
+          <div className="dash-quick-icon" style={{ background: 'rgba(0,245,255,0.1)', color: 'var(--accent-cyan)' }}>
+            <Plus size={18} />
+          </div>
+          <span>Log Workout</span>
+        </button>
+        <button className="dash-quick-btn" onClick={() => router.push('/leaderboard')}>
+          <div className="dash-quick-icon" style={{ background: 'rgba(245,158,11,0.1)', color: 'var(--accent-orange)' }}>
+            <Trophy size={18} />
+          </div>
+          <span>Leaderboard</span>
+        </button>
+        <button className="dash-quick-btn" onClick={() => router.push('/circles')}>
+          <div className="dash-quick-icon" style={{ background: 'rgba(124,58,237,0.1)', color: 'var(--accent-purple)' }}>
+            <Users size={18} />
+          </div>
+          <span>Circles</span>
+        </button>
+        <button className="dash-quick-btn" onClick={() => router.push('/profile')}>
+          <div className="dash-quick-icon" style={{ background: 'rgba(16,185,129,0.1)', color: 'var(--accent-green)' }}>
+            <Target size={18} />
+          </div>
+          <span>Profile</span>
+        </button>
+      </div>
+
+      {/* Stat Cards */}
       <div className="dash-stats">
-        <div className="stat-card dash-stat" style={{ animationDelay: '0.05s' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-            <Dumbbell size={18} style={{ color: 'var(--accent-cyan)' }} />
-            <span className="stat-label" style={{ margin: 0 }}>Total Logs</span>
+        {/* Total Logs */}
+        <button
+          className="stat-card dash-stat dash-stat-btn"
+          style={{ animationDelay: '0.05s', textAlign: 'left' }}
+          onClick={() => setOpenDrawer('logs')}
+          title="View log history"
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Dumbbell size={17} style={{ color: 'var(--accent-cyan)' }} />
+              <span className="stat-label" style={{ margin: 0 }}>Total Logs</span>
+            </div>
+            <ChevronRight size={14} style={{ color: 'var(--text-muted)' }} />
           </div>
           <div className="stat-value"><CountUp value={stats.totalLogs} /></div>
           {stats.thisWeekLogs > 0 && <div className="stat-delta up"><TrendingUp size={12} />+{stats.thisWeekLogs} this week</div>}
-        </div>
-        <div className="stat-card dash-stat" style={{ animationDelay: '0.1s' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-            <Calendar size={18} style={{ color: 'var(--accent-purple)' }} />
-            <span className="stat-label" style={{ margin: 0 }}>This Week</span>
+        </button>
+
+        {/* This Week */}
+        <button
+          className="stat-card dash-stat dash-stat-btn"
+          style={{ animationDelay: '0.1s', textAlign: 'left' }}
+          onClick={() => setOpenDrawer('week')}
+          title="Weekly breakdown"
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Calendar size={17} style={{ color: 'var(--accent-purple)' }} />
+              <span className="stat-label" style={{ margin: 0 }}>This Week</span>
+            </div>
+            <ChevronRight size={14} style={{ color: 'var(--text-muted)' }} />
           </div>
           <div className="stat-value"><CountUp value={stats.thisWeekLogs} /></div>
-          <Delta value={stats.thisWeekLogs - stats.lastWeekLogs} />
-        </div>
-        <div className="stat-card dash-stat" style={{ animationDelay: '0.15s' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-            <TrendingUp size={18} style={{ color: 'var(--accent-green)' }} />
-            <span className="stat-label" style={{ margin: 0 }}>Exercises</span>
+          <Delta value={weekDelta} />
+        </button>
+
+        {/* Exercises */}
+        <button
+          className="stat-card dash-stat dash-stat-btn"
+          style={{ animationDelay: '0.15s', textAlign: 'left' }}
+          onClick={() => setOpenDrawer('exercises')}
+          title="View exercises"
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <BarChart2 size={17} style={{ color: 'var(--accent-green)' }} />
+              <span className="stat-label" style={{ margin: 0 }}>Exercises</span>
+            </div>
+            <ChevronRight size={14} style={{ color: 'var(--text-muted)' }} />
           </div>
           <div className="stat-value"><CountUp value={stats.uniqueExercises} /></div>
-          <div className="stat-delta neutral">{stats.uniqueExercises === 1 ? 'movement tracked' : 'movements tracked'}</div>
-        </div>
-        <div className="stat-card dash-stat" style={{ animationDelay: '0.2s' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-            <Award size={18} style={{ color: 'var(--accent-orange)' }} />
-            <span className="stat-label" style={{ margin: 0 }}>Best Lift</span>
+          <div className="stat-delta neutral">{stats.uniqueExercises === 1 ? 'movement' : 'movements'} tracked</div>
+        </button>
+
+        {/* Best Lift */}
+        <button
+          className="stat-card dash-stat dash-stat-btn"
+          style={{ animationDelay: '0.2s', textAlign: 'left', position: 'relative', overflow: 'hidden' }}
+          onClick={(e) => { triggerBest(e); setOpenDrawer('bests'); }}
+          title="Personal records"
+        >
+          {bestRipples.map(r => (
+            <span key={r.id} className="dash-ripple" style={{ left: r.x, top: r.y }} />
+          ))}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Award size={17} style={{ color: 'var(--accent-orange)' }} />
+              <span className="stat-label" style={{ margin: 0 }}>Best Lift</span>
+            </div>
+            <ChevronRight size={14} style={{ color: 'var(--text-muted)' }} />
           </div>
           <div className="stat-value">{stats.bestLift ? <><CountUp value={stats.bestLift.weight} />kg</> : '—'}</div>
-          {stats.bestLift && (
-            <div className="stat-delta neutral" style={{ color: 'var(--text-secondary)' }}>
-              {stats.bestLift.name}
-            </div>
-          )}
-        </div>
+          {stats.bestLift && <div className="stat-delta neutral" style={{ color: 'var(--text-secondary)' }}>{stats.bestLift.name}</div>}
+        </button>
       </div>
 
-      {/* Recent Activity */}
+      {/* Recent Community Log */}
       {recentLog && (
-        <div className="card dash-recent animate-fade-in-up" style={{ marginBottom: 32, animationDelay: '0.25s', borderLeft: '3px solid var(--accent-purple)', background: 'linear-gradient(145deg, rgba(14, 14, 22, 0.9), rgba(20, 20, 30, 0.9))' }}>
+        <button
+          className="card dash-recent dash-stat-btn animate-fade-in-up"
+          style={{ width: '100%', marginBottom: 28, animationDelay: '0.25s', borderLeft: '3px solid var(--accent-purple)', background: 'linear-gradient(145deg, rgba(14,14,22,0.9), rgba(20,20,30,0.9))', textAlign: 'left', cursor: 'pointer' }}
+          onClick={() => router.push('/circles')}
+          title="View in Circles"
+        >
           <div>
-            <h3 style={{ fontSize: 13, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--text-muted)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <TrendingUp size={14} style={{ color: 'var(--accent-purple)' }}/> Most Recent Community Log
+            <h3 style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--text-muted)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <TrendingUp size={13} style={{ color: 'var(--accent-purple)' }} /> Latest Community Log
             </h3>
-            <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>
-              {recentLog.exerciseName} <span style={{ color: 'var(--accent-cyan)', fontWeight: 600, fontSize: 18 }}>• {recentLog.weight}kg</span>
+            <div style={{ fontSize: 19, fontWeight: 700, color: 'var(--text-primary)' }}>
+              {recentLog.exerciseName} <span style={{ color: 'var(--accent-cyan)', fontWeight: 600, fontSize: 17 }}>• {recentLog.weight}kg</span>
             </div>
           </div>
           <div className="dash-recent-user">
             <div style={{ textAlign: 'right' }}>
-              <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-primary)' }}>{recentLog.username}</div>
+              <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>{recentLog.username}</div>
               <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{recentLog.timeAgo}</div>
             </div>
             {recentLog.avatar_url ? (
-              <img src={recentLog.avatar_url} alt="" className="avatar" style={{ width: 44, height: 44, border: '2px solid rgba(124, 58, 237, 0.3)' }} />
+              <img src={recentLog.avatar_url} alt="" className="avatar" style={{ width: 42, height: 42, border: '2px solid rgba(124,58,237,0.3)' }} />
             ) : (
-              <div className="avatar-placeholder" style={{ width: 44, height: 44, fontSize: 16, background: 'rgba(124, 58, 237, 0.1)', color: 'var(--accent-purple)', border: '2px solid rgba(124, 58, 237, 0.3)' }}>
+              <div className="avatar-placeholder" style={{ width: 42, height: 42, fontSize: 15, background: 'rgba(124,58,237,0.1)', color: 'var(--accent-purple)', border: '2px solid rgba(124,58,237,0.3)' }}>
                 {recentLog.username.charAt(0).toUpperCase()}
               </div>
             )}
+            <ArrowRight size={16} style={{ color: 'var(--accent-purple)', flexShrink: 0 }} />
           </div>
-        </div>
+        </button>
       )}
 
       {/* Charts */}
@@ -342,57 +413,205 @@ export default function DashboardPage() {
           <Dumbbell size={48} />
           <h3>No workout data yet</h3>
           <p>Start logging your workouts to see your progress charts here.</p>
+          <button className="btn-primary" style={{ marginTop: 20 }} onClick={() => router.push('/log')}>
+            <Plus size={16} /> Log First Workout
+          </button>
         </div>
       ) : (
         <div className="dash-charts">
           {charts.map((chart, i) => (
-            <div key={chart.exerciseName} className="card dash-stat animate-fade-in-up" style={{ animationDelay: `${0.1 * (i + 1)}s` }}>
-              <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{
-                  width: 8, height: 8, borderRadius: '50%',
-                  background: CHART_COLORS[i % CHART_COLORS.length],
-                  display: 'inline-block'
-                }} />
-                {chart.exerciseName}
-              </h3>
+            <div
+              key={chart.exerciseName}
+              className="card dash-stat animate-fade-in-up"
+              style={{ animationDelay: `${0.1 * (i + 1)}s`, padding: '20px 20px 16px' }}
+            >
+              {/* Chart header */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <h3 style={{ fontSize: 15, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: CHART_COLORS[i % CHART_COLORS.length], display: 'inline-block', flexShrink: 0 }} />
+                  {chart.exerciseName}
+                </h3>
+                <button
+                  className="dash-chart-log-btn"
+                  onClick={() => router.push('/log')}
+                  title={`Log ${chart.exerciseName}`}
+                  style={{ '--btn-color': CHART_COLORS[i % CHART_COLORS.length] } as React.CSSProperties}
+                >
+                  <Plus size={13} /> Log
+                </button>
+              </div>
+
+              {/* Mini stats row */}
+              <div className="dash-chart-meta">
+                <span className="dash-chart-meta-item">
+                  <Award size={11} style={{ color: CHART_COLORS[i % CHART_COLORS.length] }} />
+                  PB: <strong>{chart.maxWeight}kg</strong>
+                </span>
+                <span className="dash-chart-meta-item">
+                  <Calendar size={11} style={{ color: 'var(--text-muted)' }} />
+                  {chart.totalSessions} sessions
+                </span>
+              </div>
+
               <ResponsiveContainer width="100%" height={chartHeight}>
-                <LineChart data={chart.data} margin={{ top: 4, right: 8, left: compactAxis ? -24 : 0, bottom: 0 }}>
+                <AreaChart data={chart.data} margin={{ top: 4, right: 6, left: compactAxis ? -24 : -4, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id={`grad${i}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={CHART_COLORS[i % CHART_COLORS.length]} stopOpacity={0.18} />
+                      <stop offset="95%" stopColor={CHART_COLORS[i % CHART_COLORS.length]} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
                   <XAxis
                     dataKey="date"
-                    tick={{ fill: '#55556a', fontSize: 11 }}
+                    tick={{ fill: '#55556a', fontSize: 10 }}
                     axisLine={{ stroke: 'rgba(255,255,255,0.06)' }}
                     tickLine={false}
-                    minTickGap={compactAxis ? 24 : 8}
-                    tickFormatter={(v) => {
-                      const d = new Date(v);
-                      return `${d.getDate()}/${d.getMonth() + 1}`;
-                    }}
+                    minTickGap={compactAxis ? 28 : 12}
+                    tickFormatter={(v) => { const d = new Date(v); return `${d.getDate()}/${d.getMonth() + 1}`; }}
                   />
                   <YAxis
-                    tick={{ fill: '#55556a', fontSize: 11 }}
+                    tick={{ fill: '#55556a', fontSize: 10 }}
                     axisLine={{ stroke: 'rgba(255,255,255,0.06)' }}
                     tickLine={false}
-                    width={compactAxis ? 28 : 40}
+                    width={compactAxis ? 30 : 38}
                     unit="kg"
                   />
                   <Tooltip content={<CustomTooltip />} />
-                  <Line
+                  <Area
                     type="monotone"
                     dataKey="weight"
                     stroke={CHART_COLORS[i % CHART_COLORS.length]}
                     strokeWidth={2}
-                    dot={{ r: 3, fill: CHART_COLORS[i % CHART_COLORS.length] }}
-                    activeDot={{ r: 5, stroke: CHART_COLORS[i % CHART_COLORS.length], strokeWidth: 2 }}
+                    fill={`url(#grad${i})`}
+                    dot={{ r: 3, fill: CHART_COLORS[i % CHART_COLORS.length], strokeWidth: 0 }}
+                    activeDot={{ r: 5, stroke: CHART_COLORS[i % CHART_COLORS.length], strokeWidth: 2, fill: 'var(--bg-primary)' }}
                     isAnimationActive
                     animationDuration={900}
-                    animationBegin={150 * i}
+                    animationBegin={120 * i}
                   />
-                </LineChart>
+                </AreaChart>
               </ResponsiveContainer>
             </div>
           ))}
         </div>
+      )}
+
+      {/* ---- Drawers ---- */}
+
+      {openDrawer === 'streak' && (
+        <StatDrawer title="🔥 Your Streak" onClose={() => setOpenDrawer(null)}>
+          <div className="dash-drawer-stat-big" style={{ color: 'var(--accent-orange)' }}>
+            {stats.streak} days
+          </div>
+          <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 20 }}>
+            You&apos;ve trained on <strong style={{ color: 'var(--text-primary)' }}>{stats.streak}</strong> consecutive
+            {stats.streak === 1 ? ' day' : ' days'}. Keep pushing — consistency is everything.
+          </p>
+          <button className="btn-primary" style={{ width: '100%' }} onClick={() => { setOpenDrawer(null); router.push('/log'); }}>
+            <Plus size={16} /> Log Today&apos;s Workout
+          </button>
+        </StatDrawer>
+      )}
+
+      {openDrawer === 'logs' && (
+        <StatDrawer title="📋 All Logs" onClose={() => setOpenDrawer(null)}>
+          <div className="dash-drawer-stat-big">{stats.totalLogs}</div>
+          <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 8 }}>
+            Total workout sets logged across all exercises.
+          </p>
+          <div className="dash-drawer-row">
+            <span style={{ color: 'var(--text-muted)' }}>This week</span>
+            <strong>{stats.thisWeekLogs} sets</strong>
+          </div>
+          <div className="dash-drawer-row">
+            <span style={{ color: 'var(--text-muted)' }}>Last week</span>
+            <strong>{stats.lastWeekLogs} sets</strong>
+          </div>
+          <div className="dash-drawer-row">
+            <span style={{ color: 'var(--text-muted)' }}>Change</span>
+            <strong style={{ color: weekDelta >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>
+              {weekDelta >= 0 ? '+' : ''}{weekDelta}
+            </strong>
+          </div>
+          <button className="btn-primary" style={{ width: '100%', marginTop: 20 }} onClick={() => { setOpenDrawer(null); router.push('/log'); }}>
+            <Plus size={16} /> Log New Set
+          </button>
+        </StatDrawer>
+      )}
+
+      {openDrawer === 'week' && (
+        <StatDrawer title="📅 This Week" onClose={() => setOpenDrawer(null)}>
+          <div className="dash-drawer-stat-big">{stats.thisWeekLogs}</div>
+          <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 16 }}>
+            Sets logged in the last 7 days.
+          </p>
+          <div className="dash-drawer-row">
+            <span style={{ color: 'var(--text-muted)' }}>vs. last week</span>
+            <strong style={{ color: weekDelta >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>
+              {weekDelta >= 0 ? '+' : ''}{weekDelta} sets
+            </strong>
+          </div>
+          {weekDelta < 0 && (
+            <div className="dash-drawer-tip">
+              💡 You logged <strong>{Math.abs(weekDelta)} fewer sets</strong> than last week — time to step it up!
+            </div>
+          )}
+          {weekDelta > 0 && (
+            <div className="dash-drawer-tip" style={{ borderColor: 'rgba(16,185,129,0.3)', background: 'rgba(16,185,129,0.06)', color: 'var(--accent-green)' }}>
+              🎉 You logged <strong>{weekDelta} more sets</strong> than last week — great progress!
+            </div>
+          )}
+          <button className="btn-primary" style={{ width: '100%', marginTop: 20 }} onClick={() => { setOpenDrawer(null); router.push('/log'); }}>
+            <Plus size={16} /> Add a Set
+          </button>
+        </StatDrawer>
+      )}
+
+      {openDrawer === 'exercises' && (
+        <StatDrawer title="🏋️ Tracked Exercises" onClose={() => setOpenDrawer(null)}>
+          <div className="dash-drawer-stat-big">{stats.uniqueExercises}</div>
+          <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 16 }}>
+            Different movements in your training history.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {personalBests.map((pb, i) => (
+              <div key={pb.name} className="dash-drawer-exercise-row">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: CHART_COLORS[i % CHART_COLORS.length], display: 'inline-block', flexShrink: 0 }} />
+                  <span style={{ fontWeight: 600, fontSize: 14 }}>{pb.name}</span>
+                </div>
+                <span style={{ fontSize: 13, color: 'var(--accent-cyan)', fontWeight: 700 }}>PB {pb.weight}kg</span>
+              </div>
+            ))}
+          </div>
+          <button className="btn-primary" style={{ width: '100%', marginTop: 20 }} onClick={() => { setOpenDrawer(null); router.push('/log'); }}>
+            <Plus size={16} /> Log an Exercise
+          </button>
+        </StatDrawer>
+      )}
+
+      {openDrawer === 'bests' && (
+        <StatDrawer title="🏆 Personal Bests" onClose={() => setOpenDrawer(null)}>
+          <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 16 }}>Your all-time personal records.</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {personalBests.map((pb, i) => (
+              <div key={pb.name} className="dash-drawer-pb-row">
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 14 }}>{pb.name}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{pb.date}</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: CHART_COLORS[i % CHART_COLORS.length] }}>{pb.weight}kg</div>
+                  {pb.reps && <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>× {pb.reps} reps</div>}
+                </div>
+              </div>
+            ))}
+          </div>
+          <button className="btn-secondary" style={{ width: '100%', marginTop: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }} onClick={() => { setOpenDrawer(null); router.push('/leaderboard'); }}>
+            <Trophy size={15} /> View Leaderboard <ArrowRight size={14} />
+          </button>
+        </StatDrawer>
       )}
     </div>
   );
