@@ -376,7 +376,7 @@ export default function MusclesPage() {
                 const baseColor = MUSCLE_META[k].color;
                 if (isSelected) return hexToRgba(baseColor, 1);
                 if (sets > 0) return hexToRgba(baseColor, 0.55);
-                return 'rgba(0,0,0,0)'; // transparent — blends with bodyColor
+                return 'rgba(255,255,255,0.12)'; // match bodyColor — no gaps in silhouette
               });
               
               // Reverse-map react-body-highlighter muscle slugs back to our MuscleKey
