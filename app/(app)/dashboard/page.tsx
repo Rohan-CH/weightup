@@ -213,322 +213,339 @@ export default function DashboardPage() {
   }, []);
 
   const fetchDashboardData = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    // Recent global log
     try {
-      const { data: latestLogs } = await supabase
-        .from('workout_logs')
-        .select('user_id, weight_kg, created_at, exercises(name)')
-        .order('created_at', { ascending: false })
-        .limit(1);
-      if (latestLogs && latestLogs.length > 0) {
-        const g = latestLogs[0];
-        const { data: profile } = await supabase.from('profiles').select('username, avatar_url').eq('id', g.user_id).single();
-        if (profile) {
-          const diff = Date.now() - new Date(g.created_at).getTime();
-          const m = Math.floor(diff / 60000), h = Math.floor(m / 60), d = Math.floor(h / 24);
-          const timeAgo = d > 0 ? `${d}d ago` : h > 0 ? `${h}h ago` : m > 0 ? `${m}m ago` : 'Just now';
-          setRecentLog({ exerciseName: g.exercises?.name || 'Unknown', weight: g.weight_kg, username: profile.username || 'Unknown', avatar_url: profile.avatar_url, timeAgo });
-        }
-      }
-    } catch (e) { console.error(e); }
-
-    // User logs
-    const { data: logs } = await supabase
-      .from('workout_logs')
-      .select('*, exercises(name, target_muscles)')
-      .eq('user_id', user.id)
-      .order('logged_at', { ascending: true });
-
-    if (!logs || logs.length === 0) {
-      setLeftMuscles(Object.keys(MUSCLE_META) as MuscleKey[]);
-      setHitCount(0);
-      setLoading(false);
-      return;
-    }
-
-    // Heatmap daily log counts
-    const dailyCounts: Record<string, number> = {};
-    logs.forEach((l: any) => {
-      if (l.logged_at) {
-        dailyCounts[l.logged_at] = (dailyCounts[l.logged_at] || 0) + 1;
-      }
-    });
-    setDailyLogCounts(dailyCounts);
-
-    // Exercise counts + top 5
-    const counts: Record<string, number> = {};
-    const names: Record<string, string> = {};
-    logs.forEach((l: any) => {
-      counts[l.exercise_id] = (counts[l.exercise_id] || 0) + 1;
-      names[l.exercise_id] = l.exercises?.name || 'Unknown';
-    });
-    const top5 = Object.entries(counts).sort(([, a], [, b]) => b - a).slice(0, 5).map(([id]) => id);
-
-    // Charts + personal bests per exercise
-    const pbs: PersonalBest[] = [];
-    const chartData: ExerciseChart[] = top5.map((eid) => {
-      const exerciseLogs = logs.filter((l: any) => l.exercise_id === eid);
-      const targetMuscles = exerciseLogs[0]?.exercises?.target_muscles || null;
-      // personal best for this exercise
-      let best = exerciseLogs[0];
-      exerciseLogs.forEach((l: any) => { if (l.weight_kg > best.weight_kg) best = l; });
-      pbs.push({
-        name: names[eid],
-        weight: best.weight_kg,
-        reps: best.reps ?? null,
-        date: best.logged_at,
-        targetMuscles,
-      });
-
-      const byDate = exerciseLogs.reduce((acc: Record<string, { weight: number; volume: number }>, l: any) => {
-        const vol = (l.weight_kg || 0) * (l.reps || 0);
-        if (!acc[l.logged_at]) {
-          acc[l.logged_at] = { weight: l.weight_kg, volume: vol };
-        } else {
-          acc[l.logged_at].volume += vol;
-          if (l.weight_kg > acc[l.logged_at].weight) {
-            acc[l.logged_at].weight = l.weight_kg;
-          }
-        }
-      }, {} as Record<string, { weight: number; volume: number }>);
-
-      const data = Object.entries(byDate)
-        .map(([date, val]: [string, any]) => ({
-          date,
-          weight: Number(val.weight),
-          volume: Number(val.volume),
-        }))
-        .sort((a, b) => a.date.localeCompare(b.date));
-
-      let maxVolume = 0;
-      Object.values(byDate).forEach((val: any) => {
-        if (val.volume > maxVolume) maxVolume = val.volume;
-      });
-
-      return {
-        exerciseName: names[eid],
-        exerciseId: eid,
-        data,
-        maxWeight: best.weight_kg,
-        maxVolume,
-        totalSessions: counts[eid],
-        targetMuscles,
-      };
-    });
-
-    setPersonalBests(pbs);
-
-    // Stats
-    const uniqueExercises = new Set(logs.map((l: any) => l.exercise_id)).size;
-    let bestLift: { name: string; weight: number } | null = null;
-    logs.forEach((l: any) => { if (!bestLift || l.weight_kg > bestLift.weight) bestLift = { name: l.exercises?.name || 'Unknown', weight: l.weight_kg }; });
-
-    const today = new Date();
-    const dayStr = (d: Date) => {
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      return `${y}-${m}-${day}`;
-    };
-    const oneWeekAgo = new Date(today); oneWeekAgo.setDate(today.getDate() - 7);
-    const twoWeeksAgo = new Date(today); twoWeeksAgo.setDate(today.getDate() - 14);
-    const thisWeekLogs = logs.filter((l: any) => l.logged_at >= dayStr(oneWeekAgo)).length;
-    const lastWeekLogs = logs.filter((l: any) => l.logged_at >= dayStr(twoWeeksAgo) && l.logged_at < dayStr(oneWeekAgo)).length;
-
-    // Calculate start of current week (Monday)
-    const getWeekStart = (date: Date): Date => {
-      const d = new Date(date);
-      const day = d.getDay();
-      const diff = day === 0 ? -6 : 1 - day;
-      d.setDate(d.getDate() + diff);
-      d.setHours(0, 0, 0, 0);
-      return d;
-    };
-    const wsStr = dayStr(getWeekStart(today));
-
-    // Calculate muscles worked this week (since Monday)
-    const hitMuscles = new Set<MuscleKey>();
-    const thisWeekLogsList = logs.filter((l: any) => l.logged_at >= wsStr);
-    thisWeekLogsList.forEach((l: any) => {
-      const muscles = getMusclesForExercise(l.exercises?.name || '', l.exercises?.target_muscles);
-      muscles.forEach(m => hitMuscles.add(m));
-    });
-
-    const allMuscleKeys = Object.keys(MUSCLE_META) as MuscleKey[];
-    const leftMusclesList = allMuscleKeys.filter(m => !hitMuscles.has(m));
-
-    setLeftMuscles(leftMusclesList);
-    setHitCount(hitMuscles.size);
-
-    const activeDays = new Set(logs.map((l: any) => l.logged_at));
-    let streak = 0;
-    let restDayUsed = false;
-    const cursor = new Date(today);
-    // If today has no log, step back one day (grace for "haven't logged yet today")
-    if (!activeDays.has(dayStr(cursor))) cursor.setDate(cursor.getDate() - 1);
-    while (true) {
-      if (activeDays.has(dayStr(cursor))) {
-        streak++;
-        restDayUsed = false;
-        cursor.setDate(cursor.getDate() - 1);
-      } else if (!restDayUsed) {
-        // Allow one rest day — skip it but don't count it
-        restDayUsed = true;
-        cursor.setDate(cursor.getDate() - 1);
-      } else {
-        break; // Two consecutive missed days — streak ends
-      }
-    }
-
-    setStats({ totalLogs: logs.length, uniqueExercises, bestLift, thisWeekLogs, lastWeekLogs, streak });
-    setCharts(chartData);
-
-    // Rest & Recovery calculations
-    let lastLogTime = 0;
-    logs.forEach((l: any) => {
-      const t = new Date(l.created_at || (l.logged_at + 'T12:00:00Z')).getTime();
-      if (t > lastLogTime) {
-        lastLogTime = t;
-      }
-    });
-    if (lastLogTime > 0) {
-      const hours = (Date.now() - lastLogTime) / 3600000;
-      setHoursSinceLastLog(hours);
-      const recPercent = Math.min(100, Math.max(0, Math.floor((hours / 36) * 100)));
-      setRecovery(recPercent);
-    } else {
-      setHoursSinceLastLog(null);
-      setRecovery(100);
-    }
-
-    // Muscle Fatigue Score calculations
-    const fatigueScoresObj: Record<MuscleKey, number> = {} as any;
-    allMuscleKeys.forEach(m => { fatigueScoresObj[m] = 0; });
-
-    const logsByMuscle: Record<MuscleKey, any[]> = {} as any;
-    allMuscleKeys.forEach(m => { logsByMuscle[m] = []; });
-
-    logs.forEach((log: any) => {
-      const muscles = getMusclesForExercise(log.exercises?.name || '', log.exercises?.target_muscles);
-      muscles.forEach(m => {
-        if (logsByMuscle[m]) {
-          logsByMuscle[m].push(log);
-        }
-      });
-    });
-
-    const nowTime = new Date();
-    allMuscleKeys.forEach(m => {
-      const mLogs = logsByMuscle[m];
-      if (mLogs.length === 0) {
-        fatigueScoresObj[m] = 0;
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setLoading(false);
         return;
       }
 
-      mLogs.sort((a, b) => {
-        const tA = new Date(a.created_at || (a.logged_at + 'T12:00:00Z')).getTime();
-        const tB = new Date(b.created_at || (b.logged_at + 'T12:00:00Z')).getTime();
-        return tA - tB;
+      // Recent global log
+      try {
+        const { data: latestLogs } = await supabase
+          .from('workout_logs')
+          .select('user_id, weight_kg, created_at, exercises(name)')
+          .order('created_at', { ascending: false })
+          .limit(1);
+        if (latestLogs && latestLogs.length > 0) {
+          const g = latestLogs[0];
+          const { data: profile } = await supabase.from('profiles').select('username, avatar_url').eq('id', g.user_id).single();
+          if (profile) {
+            const diff = Date.now() - new Date(g.created_at).getTime();
+            const m = Math.floor(diff / 60000), h = Math.floor(m / 60), d = Math.floor(h / 24);
+            const timeAgo = d > 0 ? `${d}d ago` : h > 0 ? `${h}h ago` : m > 0 ? `${m}m ago` : 'Just now';
+            setRecentLog({ exerciseName: g.exercises?.name || 'Unknown', weight: g.weight_kg, username: profile.username || 'Unknown', avatar_url: profile.avatar_url, timeAgo });
+          }
+        }
+      } catch (e) { console.error(e); }
+
+      // User logs
+      const { data: logs } = await supabase
+        .from('workout_logs')
+        .select('*, exercises(name, target_muscles)')
+        .eq('user_id', user.id)
+        .order('logged_at', { ascending: true });
+
+      if (!logs || logs.length === 0) {
+        setLeftMuscles(Object.keys(MUSCLE_META) as MuscleKey[]);
+        setHitCount(0);
+        
+        // Initialize fresh scores for all muscles
+        const freshScores: Record<MuscleKey, number> = {} as any;
+        (Object.keys(MUSCLE_META) as MuscleKey[]).forEach(m => {
+          freshScores[m] = 0;
+        });
+        setFatigueScores(freshScores);
+        
+        setLoading(false);
+        return;
+      }
+
+      // Heatmap daily log counts
+      const dailyCounts: Record<string, number> = {};
+      logs.forEach((l: any) => {
+        if (l.logged_at) {
+          dailyCounts[l.logged_at] = (dailyCounts[l.logged_at] || 0) + 1;
+        }
+      });
+      setDailyLogCounts(dailyCounts);
+
+      // Exercise counts + top 5
+      const counts: Record<string, number> = {};
+      const names: Record<string, string> = {};
+      logs.forEach((l: any) => {
+        counts[l.exercise_id] = (counts[l.exercise_id] || 0) + 1;
+        names[l.exercise_id] = l.exercises?.name || 'Unknown';
+      });
+      const top5 = Object.entries(counts).sort(([, a], [, b]) => b - a).slice(0, 5).map(([id]) => id);
+
+      // Charts + personal bests per exercise
+      const pbs: PersonalBest[] = [];
+      const chartData: ExerciseChart[] = top5.map((eid) => {
+        const exerciseLogs = logs.filter((l: any) => l.exercise_id === eid);
+        const targetMuscles = exerciseLogs[0]?.exercises?.target_muscles || null;
+        // personal best for this exercise
+        let best = exerciseLogs[0];
+        exerciseLogs.forEach((l: any) => { if (l.weight_kg > best.weight_kg) best = l; });
+        pbs.push({
+          name: names[eid],
+          weight: best.weight_kg,
+          reps: best.reps ?? null,
+          date: best.logged_at,
+          targetMuscles,
+        });
+
+        const byDate = exerciseLogs.reduce((acc: Record<string, { weight: number; volume: number }>, l: any) => {
+          const vol = (l.weight_kg || 0) * (l.reps || 0);
+          if (!acc[l.logged_at]) {
+            acc[l.logged_at] = { weight: l.weight_kg, volume: vol };
+          } else {
+            acc[l.logged_at].volume += vol;
+            if (l.weight_kg > acc[l.logged_at].weight) {
+              acc[l.logged_at].weight = l.weight_kg;
+            }
+          }
+          return acc;
+        }, {} as Record<string, { weight: number; volume: number }>);
+
+        const data = Object.entries(byDate)
+          .map(([date, val]: [string, any]) => ({
+            date,
+            weight: Number(val.weight),
+            volume: Number(val.volume),
+          }))
+          .sort((a, b) => a.date.localeCompare(b.date));
+
+        let maxVolume = 0;
+        Object.values(byDate).forEach((val: any) => {
+          if (val.volume > maxVolume) maxVolume = val.volume;
+        });
+
+        return {
+          exerciseName: names[eid],
+          exerciseId: eid,
+          data,
+          maxWeight: best.weight_kg,
+          maxVolume,
+          totalSessions: counts[eid],
+          targetMuscles,
+        };
       });
 
-      let fatigue = 0;
-      let prevTime: Date | null = null;
+      setPersonalBests(pbs);
 
-      for (const log of mLogs) {
-        const logTime = new Date(log.created_at || (log.logged_at + 'T12:00:00Z'));
+      // Stats
+      const uniqueExercises = new Set(logs.map((l: any) => l.exercise_id)).size;
+      let bestLift: { name: string; weight: number } | null = null;
+      logs.forEach((l: any) => { if (!bestLift || l.weight_kg > bestLift.weight) bestLift = { name: l.exercises?.name || 'Unknown', weight: l.weight_kg }; });
+
+      const today = new Date();
+      const dayStr = (d: Date) => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+      };
+      const oneWeekAgo = new Date(today); oneWeekAgo.setDate(today.getDate() - 7);
+      const twoWeeksAgo = new Date(today); twoWeeksAgo.setDate(today.getDate() - 14);
+      const thisWeekLogs = logs.filter((l: any) => l.logged_at >= dayStr(oneWeekAgo)).length;
+      const lastWeekLogs = logs.filter((l: any) => l.logged_at >= dayStr(twoWeeksAgo) && l.logged_at < dayStr(oneWeekAgo)).length;
+
+      // Calculate start of current week (Monday)
+      const getWeekStart = (date: Date): Date => {
+        const d = new Date(date);
+        const day = d.getDay();
+        const diff = day === 0 ? -6 : 1 - day;
+        d.setDate(d.getDate() + diff);
+        d.setHours(0, 0, 0, 0);
+        return d;
+      };
+      const wsStr = dayStr(getWeekStart(today));
+
+      // Calculate muscles worked this week (since Monday)
+      const hitMuscles = new Set<MuscleKey>();
+      const thisWeekLogsList = logs.filter((l: any) => l.logged_at >= wsStr);
+      thisWeekLogsList.forEach((l: any) => {
+        const muscles = getMusclesForExercise(l.exercises?.name || '', l.exercises?.target_muscles);
+        muscles.forEach(m => hitMuscles.add(m));
+      });
+
+      const allMuscleKeys = Object.keys(MUSCLE_META) as MuscleKey[];
+      const leftMusclesList = allMuscleKeys.filter(m => !hitMuscles.has(m));
+
+      setLeftMuscles(leftMusclesList);
+      setHitCount(hitMuscles.size);
+
+      const activeDays = new Set(logs.map((l: any) => l.logged_at));
+      let streak = 0;
+      let restDayUsed = false;
+      const cursor = new Date(today);
+      // If today has no log, step back one day (grace for "haven't logged yet today")
+      if (!activeDays.has(dayStr(cursor))) cursor.setDate(cursor.getDate() - 1);
+      while (true) {
+        if (activeDays.has(dayStr(cursor))) {
+          streak++;
+          restDayUsed = false;
+          cursor.setDate(cursor.getDate() - 1);
+        } else if (!restDayUsed) {
+          // Allow one rest day — skip it but don't count it
+          restDayUsed = true;
+          cursor.setDate(cursor.getDate() - 1);
+        } else {
+          break; // Two consecutive missed days — streak ends
+        }
+      }
+
+      setStats({ totalLogs: logs.length, uniqueExercises, bestLift, thisWeekLogs, lastWeekLogs, streak });
+      setCharts(chartData);
+
+      // Rest & Recovery calculations
+      let lastLogTime = 0;
+      logs.forEach((l: any) => {
+        const t = new Date(l.created_at || (l.logged_at + 'T12:00:00Z')).getTime();
+        if (t > lastLogTime) {
+          lastLogTime = t;
+        }
+      });
+      if (lastLogTime > 0) {
+        const hours = (Date.now() - lastLogTime) / 3600000;
+        setHoursSinceLastLog(hours);
+        const recPercent = Math.min(100, Math.max(0, Math.floor((hours / 36) * 100)));
+        setRecovery(recPercent);
+      } else {
+        setHoursSinceLastLog(null);
+        setRecovery(100);
+      }
+
+      // Muscle Fatigue Score calculations
+      const fatigueScoresObj: Record<MuscleKey, number> = {} as any;
+      allMuscleKeys.forEach(m => { fatigueScoresObj[m] = 0; });
+
+      const logsByMuscle: Record<MuscleKey, any[]> = {} as any;
+      allMuscleKeys.forEach(m => { logsByMuscle[m] = []; });
+
+      logs.forEach((log: any) => {
+        const muscles = getMusclesForExercise(log.exercises?.name || '', log.exercises?.target_muscles);
+        muscles.forEach(m => {
+          if (logsByMuscle[m]) {
+            logsByMuscle[m].push(log);
+          }
+        });
+      });
+
+      const nowTime = new Date();
+      allMuscleKeys.forEach(m => {
+        const mLogs = logsByMuscle[m];
+        if (mLogs.length === 0) {
+          fatigueScoresObj[m] = 0;
+          return;
+        }
+
+        mLogs.sort((a, b) => {
+          const tA = new Date(a.created_at || (a.logged_at + 'T12:00:00Z')).getTime();
+          const tB = new Date(b.created_at || (b.logged_at + 'T12:00:00Z')).getTime();
+          return tA - tB;
+        });
+
+        let fatigue = 0;
+        let prevTime: Date | null = null;
+
+        for (const log of mLogs) {
+          const logTime = new Date(log.created_at || (log.logged_at + 'T12:00:00Z'));
+          if (prevTime !== null) {
+            const hours = (logTime.getTime() - prevTime.getTime()) / 3600000;
+            if (hours > 0) {
+              fatigue = fatigue * Math.pow(0.5, hours / 24);
+            }
+          }
+          fatigue = Math.min(100, fatigue + 25);
+          prevTime = logTime;
+        }
+
         if (prevTime !== null) {
-          const hours = (logTime.getTime() - prevTime.getTime()) / 3600000;
+          const hours = (nowTime.getTime() - prevTime.getTime()) / 3600000;
           if (hours > 0) {
             fatigue = fatigue * Math.pow(0.5, hours / 24);
           }
         }
-        fatigue = Math.min(100, fatigue + 25);
-        prevTime = logTime;
-      }
 
-      if (prevTime !== null) {
-        const hours = (nowTime.getTime() - prevTime.getTime()) / 3600000;
-        if (hours > 0) {
-          fatigue = fatigue * Math.pow(0.5, hours / 24);
-        }
-      }
+        fatigueScoresObj[m] = Math.round(fatigue);
+      });
+      setFatigueScores(fatigueScoresObj);
 
-      fatigueScoresObj[m] = Math.round(fatigue);
-    });
-    setFatigueScores(fatigueScoresObj);
+      // PR Milestone calculations
+      const milestonesList: Milestone[] = [];
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    // PR Milestone calculations
-    const milestonesList: Milestone[] = [];
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-    const logsByExercise: Record<string, any[]> = {};
-    logs.forEach((l: any) => {
-      if (!logsByExercise[l.exercise_id]) logsByExercise[l.exercise_id] = [];
-      logsByExercise[l.exercise_id].push(l);
-    });
-
-    Object.entries(logsByExercise).forEach(([eid, eLogs]) => {
-      eLogs.sort((a: any, b: any) => {
-        const tA = new Date(a.created_at || (a.logged_at + 'T12:00:00Z')).getTime();
-        const tB = new Date(b.created_at || (b.logged_at + 'T12:00:00Z')).getTime();
-        return tA - tB;
+      const logsByExercise: Record<string, any[]> = {};
+      logs.forEach((l: any) => {
+        if (!logsByExercise[l.exercise_id]) logsByExercise[l.exercise_id] = [];
+        logsByExercise[l.exercise_id].push(l);
       });
 
-      let prevMax = 0;
-      eLogs.forEach((log: any) => {
-        const logTime = new Date(log.created_at || (log.logged_at + 'T12:00:00Z'));
-        const isRecent = logTime.getTime() >= sevenDaysAgo.getTime();
+      Object.entries(logsByExercise).forEach(([eid, eLogs]) => {
+        eLogs.sort((a: any, b: any) => {
+          const tA = new Date(a.created_at || (a.logged_at + 'T12:00:00Z')).getTime();
+          const tB = new Date(b.created_at || (b.logged_at + 'T12:00:00Z')).getTime();
+          return tA - tB;
+        });
 
-        if (log.weight_kg > prevMax) {
-          if (isRecent && prevMax > 0) {
-            const diff = log.weight_kg - prevMax;
-            const diffTime = Date.now() - logTime.getTime();
-            const d = Math.floor(diffTime / 86400000);
-            const h = Math.floor((diffTime % 86400000) / 3600000);
-            const timeAgo = d > 0 ? `${d}d ago` : h > 0 ? `${h}h ago` : 'recently';
+        let prevMax = 0;
+        eLogs.forEach((log: any) => {
+          const logTime = new Date(log.created_at || (log.logged_at + 'T12:00:00Z'));
+          const isRecent = logTime.getTime() >= sevenDaysAgo.getTime();
 
-            milestonesList.push({
-              type: 'pr',
-              title: '🏆 New Personal Record!',
-              message: `You reached ${log.weight_kg}kg on ${log.exercises?.name || 'Exercise'} (a +${diff}kg increase) ${timeAgo}!`,
-              timestamp: logTime.getTime(),
-              meta: { exerciseName: log.exercises?.name, weight: log.weight_kg, diff }
-            });
+          if (log.weight_kg > prevMax) {
+            if (isRecent && prevMax > 0) {
+              const diff = log.weight_kg - prevMax;
+              const diffTime = Date.now() - logTime.getTime();
+              const d = Math.floor(diffTime / 86400000);
+              const h = Math.floor((diffTime % 86400000) / 3600000);
+              const timeAgo = d > 0 ? `${d}d ago` : h > 0 ? `${h}h ago` : 'recently';
+
+              milestonesList.push({
+                type: 'pr',
+                title: '🏆 New Personal Record!',
+                message: `You reached ${log.weight_kg}kg on ${log.exercises?.name || 'Exercise'} (a +${diff}kg increase) ${timeAgo}!`,
+                timestamp: logTime.getTime(),
+                meta: { exerciseName: log.exercises?.name, weight: log.weight_kg, diff }
+              });
+            }
+            prevMax = log.weight_kg;
           }
-          prevMax = log.weight_kg;
-        }
+        });
       });
-    });
 
-    if (streak >= 3) {
-      milestonesList.push({
-        type: 'streak',
-        title: '🔥 Consistency Milestone!',
-        message: `You reached an active ${streak}-day workout streak! Keep pushing!`,
-        timestamp: Date.now(),
-        meta: { streak }
-      });
+      if (streak >= 3) {
+        milestonesList.push({
+          type: 'streak',
+          title: '🔥 Consistency Milestone!',
+          message: `You reached an active ${streak}-day workout streak! Keep pushing!`,
+          timestamp: Date.now(),
+          meta: { streak }
+        });
+      }
+
+      const hitCountThisWeek = 16 - leftMusclesList.length;
+      if (hitCountThisWeek >= 4) {
+        milestonesList.push({
+          type: 'muscle',
+          title: '⚡ Muscle Mastery!',
+          message: `You hit ${hitCountThisWeek} out of 16 muscle groups this week. Exceptional balance!`,
+          timestamp: Date.now() - 1000,
+          meta: { hitCount: hitCountThisWeek }
+        });
+      }
+
+      milestonesList.sort((a, b) => b.timestamp - a.timestamp);
+      setRecentMilestones(milestonesList.slice(0, 4));
+
+    } catch (err) {
+      console.error('Error fetching dashboard data:', err);
+    } finally {
+      setLoading(false);
     }
-
-    const hitCountThisWeek = 16 - leftMusclesList.length;
-    if (hitCountThisWeek >= 4) {
-      milestonesList.push({
-        type: 'muscle',
-        title: '⚡ Muscle Mastery!',
-        message: `You hit ${hitCountThisWeek} out of 16 muscle groups this week. Exceptional balance!`,
-        timestamp: Date.now() - 1000,
-        meta: { hitCount: hitCountThisWeek }
-      });
-    }
-
-    milestonesList.sort((a, b) => b.timestamp - a.timestamp);
-    setRecentMilestones(milestonesList.slice(0, 4));
-
-    setLoading(false);
   };
 
   const CustomTooltip = ({ active, payload, label }: any) => {
