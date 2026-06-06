@@ -321,13 +321,26 @@
   overflow: hidden;
 }
 
-/* On mobile the bell sits at the right of the open sidebar, so anchor right. */
+/* On mobile, escape the sidebar stacking context with fixed positioning.
+   The JS sets --notif-top / --notif-left via style when the dropdown opens,
+   but as a safe fallback we anchor near the top-right of the sidebar. */
 @media (max-width: 768px) {
   .notif-dropdown {
-    left: auto;
-    right: 0;
+    position: fixed;
+    top: var(--notif-top, 64px);
+    left: var(--notif-left, auto);
+    right: var(--notif-right, 8px);
+    /* ensure it never bleeds off-screen */
+    max-width: calc(100vw - 16px);
+    width: min(300px, calc(100vw - 16px));
+  }
+
+  .notif-list {
+    /* cap height so the panel fits within the viewport on small phones */
+    max-height: min(380px, calc(100dvh - 180px));
   }
 }
+
 
 .notif-head {
   display: flex;

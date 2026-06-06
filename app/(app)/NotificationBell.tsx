@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Bell, Mail, MessageCircle, Smile, Activity, Check } from 'lucide-react';
@@ -42,6 +42,8 @@ export default function NotificationBell() {
   const [invites, setInvites] = useState<Invite[]>([]);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const bellRef = useRef<HTMLButtonElement>(null);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
   const router = useRouter();
   const supabase = createClient();
 
@@ -91,6 +93,27 @@ export default function NotificationBell() {
   }, []);
 
   const unreadCount = notifs.filter((n) => !n.read).length + invites.length;
+
+  const toggleOpen = () => {
+    if (!open && bellRef.current) {
+      const rect = bellRef.current.getBoundingClientRect();
+      const isMobile = window.innerWidth <= 768;
+      if (isMobile) {
+        const dropdownWidth = Math.min(300, window.innerWidth - 16);
+        // Prefer to open to the right of the bell; if it would overflow, pin to right edge
+        const rightFromViewport = window.innerWidth - rect.right;
+        setDropdownStyle({
+          ['--notif-top' as string]: `${rect.bottom + 8}px`,
+          ['--notif-right' as string]: `${Math.max(8, rightFromViewport - 4)}px`,
+          ['--notif-left' as string]: 'auto',
+        } as React.CSSProperties);
+        void dropdownWidth; // used by CSS
+      } else {
+        setDropdownStyle({});
+      }
+    }
+    setOpen((o) => !o);
+  };
 
   const markRead = async (id: string) => {
     setNotifs((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
@@ -145,7 +168,8 @@ export default function NotificationBell() {
     <div className="notif-wrap" ref={ref}>
       <button
         className="notif-bell"
-        onClick={() => setOpen((o) => !o)}
+        ref={bellRef}
+        onClick={toggleOpen}
         aria-label="Notifications"
       >
         <Bell size={18} />
@@ -155,7 +179,7 @@ export default function NotificationBell() {
       </button>
 
       {open && (
-        <div className="notif-dropdown animate-fade-in">
+        <div className="notif-dropdown animate-fade-in" style={dropdownStyle}>
           <div className="notif-head">
             <span>Notifications</span>
             {notifs.some((n) => !n.read) && (
