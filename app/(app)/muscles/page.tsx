@@ -378,7 +378,7 @@ export default function MusclesPage() {
 
       const { data } = await supabase
         .from('workout_logs')
-        .select('id, exercise_id, logged_at, weight_kg, reps, sets, exercises(name)')
+        .select('id, exercise_id, logged_at, weight_kg, reps, exercises(name)')
         .eq('user_id', user.id)
         .gte('logged_at', dayStr(weekStart))
         .lte('logged_at', dayStr(weekEnd) + 'T23:59:59.999Z')
@@ -396,8 +396,7 @@ export default function MusclesPage() {
     logs.forEach(log => {
       const name = log.exercises?.name ?? '';
       const muscles = getMusclesForExercise(name);
-      const logSets = log.sets ?? 1;
-      muscles.forEach(m => { totals[m] = (totals[m] ?? 0) + logSets; });
+      muscles.forEach(m => { totals[m] = (totals[m] ?? 0) + 1; });
     });
     return totals;
   })();
@@ -410,8 +409,7 @@ export default function MusclesPage() {
       if (!map[log.exercise_id]) {
         map[log.exercise_id] = { name, sets: 0, muscles: getMusclesForExercise(name) };
       }
-      const logSets = log.sets ?? 1;
-      map[log.exercise_id].sets += logSets;
+      map[log.exercise_id].sets++;
     });
     return Object.values(map).sort((a, b) => b.sets - a.sets);
   })();
