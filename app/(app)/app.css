@@ -321,23 +321,14 @@
   overflow: hidden;
 }
 
-/* On mobile, escape the sidebar stacking context with fixed positioning
-   and pin 8px from the right edge of the viewport so it never bleeds off-screen. */
+/* Positioning on mobile is handled via React portal + inline styles computed from
+   getBoundingClientRect, so no extra media-query override needed here. */
 @media (max-width: 768px) {
-  .notif-dropdown {
-    position: fixed;
-    top: var(--notif-top, 64px);
-    left: auto;
-    right: 8px;
-    max-width: calc(100vw - 16px);
-    width: min(300px, calc(100vw - 16px));
-  }
-
   .notif-list {
-    /* cap height so the panel fits within the viewport on small phones */
     max-height: min(380px, calc(100dvh - 180px));
   }
 }
+
 
 
 .notif-head {

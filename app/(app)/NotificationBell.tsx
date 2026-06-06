@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Bell, Mail, MessageCircle, Smile, Activity, Check } from 'lucide-react';
@@ -41,11 +42,16 @@ export default function NotificationBell() {
   const [notifs, setNotifs] = useState<Notification[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
   const [userEmail, setUserEmail] = useState<string | null>(null);
-  const ref = useRef<HTMLDivElement>(null);
+  const [portalStyle, setPortalStyle] = useState<React.CSSProperties>({});
+  const [mounted, setMounted] = useState(false);
+
   const bellRef = useRef<HTMLButtonElement>(null);
-  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const supabase = createClient();
+
+  // Ensure portal only renders client-side
+  useEffect(() => { setMounted(true); }, []);
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -84,9 +90,13 @@ export default function NotificationBell() {
     return () => clearInterval(t);
   }, [load]);
 
+  // Close when clicking outside both the bell and the portal dropdown
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      const insideBell = bellRef.current?.contains(target);
+      const insideDropdown = dropdownRef.current?.contains(target);
+      if (!insideBell && !insideDropdown) setOpen(false);
     };
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
@@ -97,14 +107,17 @@ export default function NotificationBell() {
   const toggleOpen = () => {
     if (!open && bellRef.current) {
       const rect = bellRef.current.getBoundingClientRect();
-      const isMobile = window.innerWidth <= 768;
-      if (isMobile) {
-        setDropdownStyle({
-          ['--notif-top' as string]: `${rect.bottom + 8}px`,
-        } as React.CSSProperties);
-      } else {
-        setDropdownStyle({});
-      }
+      const dropdownW = Math.min(300, window.innerWidth - 16);
+      // Align right edge of dropdown to right edge of bell, clamped to viewport
+      const rightEdge = rect.right;
+      const left = Math.max(8, Math.min(rightEdge - dropdownW, window.innerWidth - dropdownW - 8));
+      setPortalStyle({
+        position: 'fixed',
+        top: rect.bottom + 8,
+        left,
+        width: dropdownW,
+        zIndex: 9999,
+      });
     }
     setOpen((o) => !o);
   };
@@ -158,8 +171,58 @@ export default function NotificationBell() {
     return <Activity size={16} />;
   };
 
+  const dropdown = (
+    <div
+      className="notif-dropdown animate-fade-in"
+      ref={dropdownRef}
+      style={portalStyle}
+    >
+      <div className="notif-head">
+        <span>Notifications</span>
+        {notifs.some((n) => !n.read) && (
+          <button className="notif-markall" onClick={markAllRead}>
+            <Check size={13} /> Mark all read
+          </button>
+        )}
+      </div>
+
+      <div className="notif-list">
+        {invites.length === 0 && notifs.length === 0 && (
+          <div className="notif-empty">You&apos;re all caught up</div>
+        )}
+
+        {invites.map((inv) => (
+          <button key={`inv-${inv.id}`} className="notif-item unread" onClick={goToInvites}>
+            <span className="notif-icon"><Mail size={16} /></span>
+            <span className="notif-body">
+              <span className="notif-text">
+                You&apos;re invited to join <strong>{inv.circles?.name || 'a circle'}</strong>
+              </span>
+              <span className="notif-time">{timeAgo(inv.created_at)} · Tap to respond</span>
+            </span>
+          </button>
+        ))}
+
+        {notifs.map((n) => (
+          <button
+            key={n.id}
+            className={`notif-item ${n.read ? '' : 'unread'}`}
+            onClick={() => handleClick(n)}
+          >
+            <span className="notif-icon">{iconFor(n.type)}</span>
+            <span className="notif-body">
+              <span className="notif-text">{renderText(n)}</span>
+              <span className="notif-time">{timeAgo(n.created_at)}</span>
+            </span>
+            {!n.read && <span className="notif-dot" />}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
   return (
-    <div className="notif-wrap" ref={ref}>
+    <div className="notif-wrap">
       <button
         className="notif-bell"
         ref={bellRef}
@@ -172,51 +235,8 @@ export default function NotificationBell() {
         )}
       </button>
 
-      {open && (
-        <div className="notif-dropdown animate-fade-in" style={dropdownStyle}>
-          <div className="notif-head">
-            <span>Notifications</span>
-            {notifs.some((n) => !n.read) && (
-              <button className="notif-markall" onClick={markAllRead}>
-                <Check size={13} /> Mark all read
-              </button>
-            )}
-          </div>
-
-          <div className="notif-list">
-            {invites.length === 0 && notifs.length === 0 && (
-              <div className="notif-empty">You&apos;re all caught up</div>
-            )}
-
-            {invites.map((inv) => (
-              <button key={`inv-${inv.id}`} className="notif-item unread" onClick={goToInvites}>
-                <span className="notif-icon"><Mail size={16} /></span>
-                <span className="notif-body">
-                  <span className="notif-text">
-                    You&apos;re invited to join <strong>{inv.circles?.name || 'a circle'}</strong>
-                  </span>
-                  <span className="notif-time">{timeAgo(inv.created_at)} · Tap to respond</span>
-                </span>
-              </button>
-            ))}
-
-            {notifs.map((n) => (
-              <button
-                key={n.id}
-                className={`notif-item ${n.read ? '' : 'unread'}`}
-                onClick={() => handleClick(n)}
-              >
-                <span className="notif-icon">{iconFor(n.type)}</span>
-                <span className="notif-body">
-                  <span className="notif-text">{renderText(n)}</span>
-                  <span className="notif-time">{timeAgo(n.created_at)}</span>
-                </span>
-                {!n.read && <span className="notif-dot" />}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Render dropdown via portal to escape sidebar transform stacking context */}
+      {open && mounted && createPortal(dropdown, document.body)}
     </div>
   );
 }
