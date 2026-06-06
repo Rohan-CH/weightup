@@ -359,28 +359,39 @@ export default function MusclesPage() {
           <div className="muscles-layout">
             {/* SVG diagrams */}
             {(() => {
-              // Only pass muscles that were actually worked (sets > 0) or selected
               const keys = Object.keys(MUSCLE_META) as MuscleKey[];
-              const workedKeys = keys.filter(k => (muscleWork[k] ?? 0) > 0 || selected === k);
               
-              // Build data array - only for worked/selected muscles
-              // Each entry gets frequency=1 so it maps to highlightedColors[0]
-              const data = workedKeys.map(k => ({
+              // Every muscle gets a unique frequency (index+1) so it maps to its own color slot
+              const data = keys.map((k, i) => ({
                 name: k,
                 muscles: HIGHLIGHTER_MAP[k] as any[],
-                frequency: 1
+                frequency: i + 1
               }));
               
-              // Build a single color array matching the data entries
-              const highlightedColors = workedKeys.map(k => {
+              // Build color array: index i = color for muscle with frequency i+1
+              // Worked/selected muscles get their color, unworked get transparent
+              const highlightedColors = keys.map(k => {
                 const isSelected = selected === k;
+                const sets = muscleWork[k] ?? 0;
                 const baseColor = MUSCLE_META[k].color;
-                return hexToRgba(baseColor, isSelected ? 1 : 0.55);
+                if (isSelected) return hexToRgba(baseColor, 1);
+                if (sets > 0) return hexToRgba(baseColor, 0.55);
+                return 'rgba(0,0,0,0)'; // transparent — blends with bodyColor
               });
               
+              // Reverse-map react-body-highlighter muscle slugs back to our MuscleKey
+              const reverseMap: Record<string, MuscleKey> = {};
+              for (const k of keys) {
+                for (const slug of HIGHLIGHTER_MAP[k]) {
+                  reverseMap[slug] = k;
+                }
+              }
+              
               const handleClick = (ex: any) => {
-                if (ex.data && ex.data.exercises && ex.data.exercises.length > 0) {
-                  const k = ex.data.exercises[0] as MuscleKey;
+                // ex.muscle is the react-body-highlighter slug like 'chest', 'front-deltoids'
+                const slug = ex.muscle as string;
+                const k = reverseMap[slug];
+                if (k) {
                   setSelected(s => s === k ? null : k);
                 }
               };
