@@ -99,15 +99,9 @@ export default function NotificationBell() {
       const rect = bellRef.current.getBoundingClientRect();
       const isMobile = window.innerWidth <= 768;
       if (isMobile) {
-        const dropdownWidth = Math.min(300, window.innerWidth - 16);
-        // Prefer to open to the right of the bell; if it would overflow, pin to right edge
-        const rightFromViewport = window.innerWidth - rect.right;
         setDropdownStyle({
           ['--notif-top' as string]: `${rect.bottom + 8}px`,
-          ['--notif-right' as string]: `${Math.max(8, rightFromViewport - 4)}px`,
-          ['--notif-left' as string]: 'auto',
         } as React.CSSProperties);
-        void dropdownWidth; // used by CSS
       } else {
         setDropdownStyle({});
       }

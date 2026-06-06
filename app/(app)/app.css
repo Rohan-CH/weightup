@@ -321,16 +321,14 @@
   overflow: hidden;
 }
 
-/* On mobile, escape the sidebar stacking context with fixed positioning.
-   The JS sets --notif-top / --notif-left via style when the dropdown opens,
-   but as a safe fallback we anchor near the top-right of the sidebar. */
+/* On mobile, escape the sidebar stacking context with fixed positioning
+   and pin 8px from the right edge of the viewport so it never bleeds off-screen. */
 @media (max-width: 768px) {
   .notif-dropdown {
     position: fixed;
     top: var(--notif-top, 64px);
-    left: var(--notif-left, auto);
-    right: var(--notif-right, 8px);
-    /* ensure it never bleeds off-screen */
+    left: auto;
+    right: 8px;
     max-width: calc(100vw - 16px);
     width: min(300px, calc(100vw - 16px));
   }
