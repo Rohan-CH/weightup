@@ -1265,3 +1265,16 @@
     padding: 8px 12px;
   }
 }
+
+@media (max-width: 480px) {
+  .dash-stats {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+  }
+  .stat-card.dash-stat-btn {
+    padding: 14px 16px !important;
+  }
+  .stat-card.dash-stat-btn .stat-value {
+    font-size: 22px !important;
+  }
+}

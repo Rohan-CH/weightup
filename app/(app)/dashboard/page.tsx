@@ -158,6 +158,7 @@ export default function DashboardPage() {
   const [personalBests, setPersonalBests] = useState<PersonalBest[]>([]);
   const [leftMuscles, setLeftMuscles] = useState<MuscleKey[]>([]);
   const [hitCount, setHitCount] = useState(0);
+  const [showAllLeftMuscles, setShowAllLeftMuscles] = useState(false);
   const [loading, setLoading] = useState(true);
   const [chartHeight, setChartHeight] = useState(200);
   const [compactAxis, setCompactAxis] = useState(false);
@@ -492,6 +493,8 @@ export default function DashboardPage() {
         });
 
         let prevMax = 0;
+        let highestRecentPR: Milestone | null = null;
+
         eLogs.forEach((log: any) => {
           const logTime = new Date(log.created_at || (log.logged_at + 'T12:00:00Z'));
           const isRecent = logTime.getTime() >= sevenDaysAgo.getTime();
@@ -504,17 +507,21 @@ export default function DashboardPage() {
               const h = Math.floor((diffTime % 86400000) / 3600000);
               const timeAgo = d > 0 ? `${d}d ago` : h > 0 ? `${h}h ago` : 'recently';
 
-              milestonesList.push({
+              highestRecentPR = {
                 type: 'pr',
                 title: '🏆 New Personal Record!',
                 message: `You reached ${log.weight_kg}kg on ${log.exercises?.name || 'Exercise'} (a +${diff}kg increase) ${timeAgo}!`,
                 timestamp: logTime.getTime(),
                 meta: { exerciseName: log.exercises?.name, weight: log.weight_kg, diff }
-              });
+              };
             }
             prevMax = log.weight_kg;
           }
         });
+
+        if (highestRecentPR) {
+          milestonesList.push(highestRecentPR);
+        }
       });
 
       if (streak >= 3) {
@@ -741,49 +748,50 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 6 }} className="no-scrollbar">
-          {/* Day labels on the left */}
-          <div style={{
-            display: 'grid',
-            gridTemplateRows: 'repeat(7, 10px)',
-            gap: '3px',
-            padding: '18px 0 4px',
-            fontSize: 9,
-            color: 'var(--text-muted)',
-            textAlign: 'right',
-            lineHeight: '10px',
-            width: 24,
-            flexShrink: 0
-          }}>
-            <div></div>
-            <div>Mon</div>
-            <div></div>
-            <div>Wed</div>
-            <div></div>
-            <div>Fri</div>
-            <div></div>
-          </div>
-
-          {/* Month labels + grid on the right */}
-          <div style={{ overflowX: 'auto', flex: 1, minWidth: 686 }} className="no-scrollbar">
-            {/* Month Labels */}
+        <div style={{ width: '100%', overflowX: 'auto', paddingBottom: 8 }} className="no-scrollbar">
+          <div style={{ display: 'flex', gap: 8, minWidth: 720 }}>
+            {/* Day labels on the left */}
             <div style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(53, 10px)',
+              gridTemplateRows: 'repeat(7, 10px)',
               gap: '3px',
+              padding: '18px 0 4px',
               fontSize: 9,
               color: 'var(--text-muted)',
-              marginBottom: 4
+              textAlign: 'right',
+              lineHeight: '10px',
+              width: 24,
+              flexShrink: 0
             }}>
-              {Array.from({ length: 53 }).map((_, i) => {
-                const labelObj = monthLabels.find(l => l.index === i);
-                return (
-                  <div key={i} style={{ gridColumnStart: i + 1, gridColumnEnd: i + 3, whiteSpace: 'nowrap' }}>
-                    {labelObj ? labelObj.label : ''}
-                  </div>
-                );
-              })}
+              <div></div>
+              <div>Mon</div>
+              <div></div>
+              <div>Wed</div>
+              <div></div>
+              <div>Fri</div>
+              <div></div>
             </div>
+
+            {/* Month labels + grid on the right */}
+            <div style={{ flex: 1 }}>
+              {/* Month Labels */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(53, 10px)',
+                gap: '3px',
+                fontSize: 9,
+                color: 'var(--text-muted)',
+                marginBottom: 4
+              }}>
+                {Array.from({ length: 53 }).map((_, i) => {
+                  const labelObj = monthLabels.find(l => l.index === i);
+                  return (
+                    <div key={i} style={{ gridColumnStart: i + 1, gridColumnEnd: i + 3, gridRow: 1, whiteSpace: 'nowrap' }}>
+                      {labelObj ? labelObj.label : ''}
+                    </div>
+                  );
+                })}
+              </div>
 
             {/* Heatmap Grid */}
             <div style={{
@@ -829,6 +837,7 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+      </div>
 
         {/* Legend */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, marginTop: 12, fontSize: 10, color: 'var(--text-muted)' }}>
@@ -907,8 +916,8 @@ export default function DashboardPage() {
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 10 }}>
               Muscles left to hit:
             </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
-              {leftMuscles.map(m => {
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16, alignItems: 'center' }}>
+              {(showAllLeftMuscles ? leftMuscles : leftMuscles.slice(0, 4)).map(m => {
                 const meta = MUSCLE_META[m];
                 return (
                   <div
@@ -931,6 +940,25 @@ export default function DashboardPage() {
                   </div>
                 );
               })}
+              {leftMuscles.length > 4 && (
+                <button
+                  onClick={() => setShowAllLeftMuscles(!showAllLeftMuscles)}
+                  style={{
+                    background: 'rgba(0, 245, 255, 0.08)',
+                    border: '1px solid rgba(0, 245, 255, 0.2)',
+                    color: 'var(--accent-cyan)',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    padding: '6px 14px',
+                    borderRadius: 20,
+                    transition: 'all 0.15s ease',
+                  }}
+                  className="show-more-btn"
+                >
+                  {showAllLeftMuscles ? 'Show Less' : `+ ${leftMuscles.length - 4} more`}
+                </button>
+              )}
             </div>
             <div style={{
               display: 'flex',
@@ -1076,27 +1104,16 @@ export default function DashboardPage() {
                 <h4 style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                   Fresh & Ready Muscles
                 </h4>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {Object.entries(fatigueScores)
-                    .filter(([, score]) => score <= 10)
-                    .map(([m]) => {
-                      const meta = MUSCLE_META[m as MuscleKey];
-                      return (
-                        <span key={m} style={{
-                          fontSize: 10,
-                          padding: '3px 8px',
-                          borderRadius: 20,
-                          background: 'rgba(16, 185, 129, 0.08)',
-                          color: 'var(--accent-green)',
-                          border: '1px solid rgba(16, 185, 129, 0.15)',
-                          fontWeight: 500
-                        }}>
-                          {meta.label}
-                        </span>
-                      );
-                    })}
-                  {Object.values(fatigueScores).filter(s => s <= 10).length === 0 && (
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>None - all muscles currently training/fatigued.</span>
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                  {Object.entries(fatigueScores).filter(([, score]) => score <= 10).length === 16 ? (
+                    <span style={{ color: 'var(--accent-green)', fontWeight: 500 }}>All muscle groups are fully recovered and ready!</span>
+                  ) : Object.entries(fatigueScores).filter(([, score]) => score <= 10).length === 0 ? (
+                    <span style={{ color: 'var(--text-muted)' }}>None - all muscles currently training/fatigued.</span>
+                  ) : (
+                    Object.entries(fatigueScores)
+                      .filter(([, score]) => score <= 10)
+                      .map(([m]) => MUSCLE_META[m as MuscleKey].label)
+                      .join(', ')
                   )}
                 </div>
               </div>
