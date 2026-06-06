@@ -359,18 +359,23 @@ export default function MusclesPage() {
           <div className="muscles-layout">
             {/* SVG diagrams */}
             {(() => {
+              // Only pass muscles that were actually worked (sets > 0) or selected
               const keys = Object.keys(MUSCLE_META) as MuscleKey[];
-              const data = keys.map((k, i) => ({
+              const workedKeys = keys.filter(k => (muscleWork[k] ?? 0) > 0 || selected === k);
+              
+              // Build data array - only for worked/selected muscles
+              // Each entry gets frequency=1 so it maps to highlightedColors[0]
+              const data = workedKeys.map(k => ({
                 name: k,
                 muscles: HIGHLIGHTER_MAP[k] as any[],
-                frequency: i + 1
+                frequency: 1
               }));
               
-              const highlightedColors = keys.map(k => {
+              // Build a single color array matching the data entries
+              const highlightedColors = workedKeys.map(k => {
                 const isSelected = selected === k;
                 const baseColor = MUSCLE_META[k].color;
-                const s = muscleWork[k] ?? 0;
-                return hexToRgba(baseColor, isSelected ? 1 : s > 0 ? 0.6 : 0.2);
+                return hexToRgba(baseColor, isSelected ? 1 : 0.55);
               });
               
               const handleClick = (ex: any) => {
@@ -385,6 +390,7 @@ export default function MusclesPage() {
                   <div className="muscles-diagram-wrap" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                     <Model
                       data={data}
+                      bodyColor="rgba(255,255,255,0.12)"
                       style={{ width: '100%', height: 'auto' }}
                       highlightedColors={highlightedColors}
                       onClick={handleClick}
@@ -397,6 +403,7 @@ export default function MusclesPage() {
                   <div className="muscles-diagram-wrap" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                     <Model
                       data={data}
+                      bodyColor="rgba(255,255,255,0.12)"
                       style={{ width: '100%', height: 'auto' }}
                       highlightedColors={highlightedColors}
                       onClick={handleClick}
