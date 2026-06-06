@@ -21,6 +21,7 @@ interface ExerciseChart {
   data: { date: string; weight: number }[];
   maxWeight: number;
   totalSessions: number;
+  targetMuscles?: string[] | null;
 }
 
 interface Stats {
@@ -45,16 +46,20 @@ interface PersonalBest {
   weight: number;
   reps: number | null;
   date: string;
+  targetMuscles?: string[] | null;
 }
 
 const CHART_COLORS = ['#00f5ff', '#7c3aed', '#ec4899', '#10b981', '#f59e0b', '#38bdf8', '#a855f7', '#f43f5e', '#facc15'];
 
-function getExerciseColor(name: string) {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+function getExerciseColor(name: string, targetMuscles?: string[] | null) {
+  const muscles = getMusclesForExercise(name, targetMuscles);
+  if (muscles && muscles.length > 0) {
+    const primaryMuscle = muscles[0];
+    if (MUSCLE_META[primaryMuscle]) {
+      return MUSCLE_META[primaryMuscle].color;
+    }
   }
-  return CHART_COLORS[Math.abs(hash) % CHART_COLORS.length];
+  return '#00f5ff';
 }
 function CountUp({ value, suffix = '', duration = 700 }: { value: number; suffix?: string; duration?: number }) {
   const [display, setDisplay] = useState(0);
@@ -133,6 +138,15 @@ export default function DashboardPage() {
   const [compactAxis, setCompactAxis] = useState(false);
   const [openDrawer, setOpenDrawer] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
+  
+  // Direct logging popup state
+  const [logPopupExercise, setLogPopupExercise] = useState<{ id: string; name: string; targetMuscles?: string[] | null } | null>(null);
+  const [logWeight, setLogWeight] = useState('');
+  const [logReps, setLogReps] = useState('');
+  const [logDate, setLogDate] = useState(new Date().toISOString().split('T')[0]);
+  const [logSubmitting, setLogSubmitting] = useState(false);
+  const [logError, setLogError] = useState('');
+  const [logSuccess, setLogSuccess] = useState('');
   const router = useRouter();
   const supabase = createClient();
   const { ripples: bestRipples, trigger: triggerBest } = useRipple();
@@ -204,10 +218,17 @@ export default function DashboardPage() {
     const pbs: PersonalBest[] = [];
     const chartData: ExerciseChart[] = top5.map((eid) => {
       const exerciseLogs = logs.filter((l: any) => l.exercise_id === eid);
+      const targetMuscles = exerciseLogs[0]?.exercises?.target_muscles || null;
       // personal best for this exercise
       let best = exerciseLogs[0];
       exerciseLogs.forEach((l: any) => { if (l.weight_kg > best.weight_kg) best = l; });
-      pbs.push({ name: names[eid], weight: best.weight_kg, reps: best.reps ?? null, date: best.logged_at });
+      pbs.push({
+        name: names[eid],
+        weight: best.weight_kg,
+        reps: best.reps ?? null,
+        date: best.logged_at,
+        targetMuscles,
+      });
 
       const byDate = exerciseLogs.reduce((acc: Record<string, number>, l: any) => {
         if (!acc[l.logged_at] || l.weight_kg > acc[l.logged_at]) acc[l.logged_at] = l.weight_kg;
@@ -216,7 +237,14 @@ export default function DashboardPage() {
       const data = Object.entries(byDate)
         .map(([date, weight]) => ({ date, weight: Number(weight) }))
         .sort((a, b) => a.date.localeCompare(b.date));
-      return { exerciseName: names[eid], exerciseId: eid, data, maxWeight: best.weight_kg, totalSessions: counts[eid] };
+      return {
+        exerciseName: names[eid],
+        exerciseId: eid,
+        data,
+        maxWeight: best.weight_kg,
+        totalSessions: counts[eid],
+        targetMuscles,
+      };
     });
 
     setPersonalBests(pbs);
@@ -605,7 +633,7 @@ export default function DashboardPage() {
       ) : (
         <div className="dash-charts">
           {charts.map((chart) => {
-            const chartColor = getExerciseColor(chart.exerciseName);
+            const chartColor = getExerciseColor(chart.exerciseName, chart.targetMuscles);
             return (
             <div
               key={chart.exerciseName}
@@ -620,7 +648,14 @@ export default function DashboardPage() {
                 </h3>
                 <button
                   className="dash-chart-log-btn"
-                  onClick={() => router.push('/log')}
+                  onClick={() => {
+                    setLogPopupExercise({ id: chart.exerciseId, name: chart.exerciseName, targetMuscles: chart.targetMuscles });
+                    setLogWeight('');
+                    setLogReps('');
+                    setLogDate(new Date().toISOString().split('T')[0]);
+                    setLogError('');
+                    setLogSuccess('');
+                  }}
                   title={`Log ${chart.exerciseName}`}
                   style={{ '--btn-color': chartColor } as React.CSSProperties}
                 >
@@ -767,7 +802,7 @@ export default function DashboardPage() {
                 {personalBests.map((pb) => (
                   <div key={pb.name} className="dash-drawer-exercise-row">
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: getExerciseColor(pb.name), display: 'inline-block', flexShrink: 0 }} />
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: getExerciseColor(pb.name, pb.targetMuscles), display: 'inline-block', flexShrink: 0 }} />
                       <span style={{ fontWeight: 600, fontSize: 14 }}>{pb.name}</span>
                     </div>
                     <span style={{ fontSize: 13, color: 'var(--accent-cyan)', fontWeight: 700 }} title="Personal Best (Maximum weight lifted)">PB {pb.weight}kg</span>
@@ -788,13 +823,13 @@ export default function DashboardPage() {
                   <div key={pb.name} className="dash-drawer-pb-row">
                     <div>
                       <div style={{ fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: getExerciseColor(pb.name), display: 'inline-block', flexShrink: 0 }} />
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: getExerciseColor(pb.name, pb.targetMuscles), display: 'inline-block', flexShrink: 0 }} />
                         {pb.name}
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{pb.date}</div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: 20, fontWeight: 800, color: getExerciseColor(pb.name) }}>{pb.weight}kg</div>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: getExerciseColor(pb.name, pb.targetMuscles) }}>{pb.weight}kg</div>
                       {pb.reps && <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>× {pb.reps} reps</div>}
                     </div>
                   </div>
@@ -806,6 +841,103 @@ export default function DashboardPage() {
             </StatDrawer>
           )}
         </>,
+        document.body
+      )}
+
+      {mounted && logPopupExercise && createPortal(
+        <div className="dash-drawer-overlay" onClick={() => setLogPopupExercise(null)}>
+          <div className="dash-drawer animate-fade-in-up" onClick={e => e.stopPropagation()} style={{ maxWidth: 440, height: 'auto', minHeight: 0, paddingBottom: 24, borderRadius: 16 }}>
+            <div className="dash-drawer-head">
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Dumbbell size={18} style={{ color: getExerciseColor(logPopupExercise.name, logPopupExercise.targetMuscles) }} />
+                Log {logPopupExercise.name}
+              </span>
+              <button className="dash-drawer-close" onClick={() => setLogPopupExercise(null)}><X size={18} /></button>
+            </div>
+            <div className="dash-drawer-body" style={{ padding: '0 24px' }}>
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                if (!logWeight || !logReps) {
+                  setLogError('Please enter weight and reps');
+                  return;
+                }
+                setLogSubmitting(true);
+                setLogError('');
+                setLogSuccess('');
+                
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user) return;
+
+                const { error: insertErr } = await supabase.from('workout_logs').insert({
+                  user_id: user.id,
+                  exercise_id: logPopupExercise.id,
+                  weight_kg: parseFloat(logWeight),
+                  reps: parseInt(logReps),
+                  logged_at: logDate,
+                });
+
+                if (insertErr) {
+                  setLogError(insertErr.message);
+                } else {
+                  setLogSuccess('Workout logged successfully!');
+                  // Refresh dashboard data
+                  fetchDashboardData();
+                  // Close modal after a brief delay
+                  setTimeout(() => {
+                    setLogPopupExercise(null);
+                  }, 1200);
+                }
+                setLogSubmitting(false);
+              }}>
+                <div className="form-group" style={{ marginBottom: 16 }}>
+                  <label className="label">Weight (kg)</label>
+                  <input
+                    className="input"
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    placeholder="0"
+                    value={logWeight}
+                    onChange={(e) => setLogWeight(e.target.value)}
+                    autoFocus
+                    required
+                  />
+                </div>
+                
+                <div className="form-group" style={{ marginBottom: 16 }}>
+                  <label className="label">Reps</label>
+                  <input
+                    className="input"
+                    type="number"
+                    min="1"
+                    placeholder="0"
+                    value={logReps}
+                    onChange={(e) => setLogReps(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 20 }}>
+                  <label className="label">Date</label>
+                  <input
+                    className="input"
+                    type="date"
+                    value={logDate}
+                    onChange={(e) => setLogDate(e.target.value)}
+                    required
+                  />
+                </div>
+
+                {logError && <p className="error-text" style={{ marginBottom: 12 }}>{logError}</p>}
+                {logSuccess && <p className="success-text" style={{ marginBottom: 12 }}>{logSuccess}</p>}
+
+                <button type="submit" className="btn-primary" disabled={logSubmitting} style={{ width: '100%', gap: 8 }}>
+                  {logSubmitting ? <span className="spinner" /> : <><Dumbbell size={16} /> Log Set</>}
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>,
         document.body
       )}
     </div>
