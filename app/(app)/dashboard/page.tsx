@@ -18,10 +18,19 @@ import {
 interface ExerciseChart {
   exerciseName: string;
   exerciseId: string;
-  data: { date: string; weight: number }[];
+  data: { date: string; weight: number; volume: number }[];
   maxWeight: number;
+  maxVolume: number;
   totalSessions: number;
   targetMuscles?: string[] | null;
+}
+
+interface Milestone {
+  type: 'pr' | 'streak' | 'muscle';
+  title: string;
+  message: string;
+  timestamp: number;
+  meta: any;
 }
 
 interface Stats {
@@ -92,6 +101,22 @@ function Delta({ value }: { value: number }) {
   );
 }
 
+const getHeatmapGrid = () => {
+  const dates = [];
+  const now = new Date();
+  const startDate = new Date(now);
+  startDate.setDate(now.getDate() - 364);
+  const startDay = startDate.getDay();
+  startDate.setDate(startDate.getDate() - startDay);
+  
+  const cursor = new Date(startDate);
+  for (let i = 0; i < 371; i++) {
+    dates.push(new Date(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return dates;
+};
+
 // Ripple effect hook
 function useRipple() {
   const [ripples, setRipples] = useState<{ x: number; y: number; id: number }[]>([]);
@@ -138,6 +163,14 @@ export default function DashboardPage() {
   const [compactAxis, setCompactAxis] = useState(false);
   const [openDrawer, setOpenDrawer] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
+  
+  const [chartMetric, setChartMetric] = useState<'pb' | 'volume'>('pb');
+  const [recovery, setRecovery] = useState(100);
+  const [hoursSinceLastLog, setHoursSinceLastLog] = useState<number | null>(null);
+  const [fatigueScores, setFatigueScores] = useState<Record<MuscleKey, number>>({} as any);
+  const [recentMilestones, setRecentMilestones] = useState<Milestone[]>([]);
+  const [hoveredDay, setHoveredDay] = useState<{ date: string; count: number; x: number; y: number } | null>(null);
+  const [dailyLogCounts, setDailyLogCounts] = useState<Record<string, number>>({});
   
   // Direct logging popup state
   const [logPopupExercise, setLogPopupExercise] = useState<{ id: string; name: string; targetMuscles?: string[] | null } | null>(null);
@@ -216,6 +249,15 @@ export default function DashboardPage() {
       return;
     }
 
+    // Heatmap daily log counts
+    const dailyCounts: Record<string, number> = {};
+    logs.forEach((l: any) => {
+      if (l.logged_at) {
+        dailyCounts[l.logged_at] = (dailyCounts[l.logged_at] || 0) + 1;
+      }
+    });
+    setDailyLogCounts(dailyCounts);
+
     // Exercise counts + top 5
     const counts: Record<string, number> = {};
     const names: Record<string, string> = {};
@@ -241,18 +283,37 @@ export default function DashboardPage() {
         targetMuscles,
       });
 
-      const byDate = exerciseLogs.reduce((acc: Record<string, number>, l: any) => {
-        if (!acc[l.logged_at] || l.weight_kg > acc[l.logged_at]) acc[l.logged_at] = l.weight_kg;
-        return acc;
-      }, {});
+      const byDate = exerciseLogs.reduce((acc: Record<string, { weight: number; volume: number }>, l: any) => {
+        const vol = (l.weight_kg || 0) * (l.reps || 0);
+        if (!acc[l.logged_at]) {
+          acc[l.logged_at] = { weight: l.weight_kg, volume: vol };
+        } else {
+          acc[l.logged_at].volume += vol;
+          if (l.weight_kg > acc[l.logged_at].weight) {
+            acc[l.logged_at].weight = l.weight_kg;
+          }
+        }
+      }, {} as Record<string, { weight: number; volume: number }>);
+
       const data = Object.entries(byDate)
-        .map(([date, weight]) => ({ date, weight: Number(weight) }))
+        .map(([date, val]: [string, any]) => ({
+          date,
+          weight: Number(val.weight),
+          volume: Number(val.volume),
+        }))
         .sort((a, b) => a.date.localeCompare(b.date));
+
+      let maxVolume = 0;
+      Object.values(byDate).forEach((val: any) => {
+        if (val.volume > maxVolume) maxVolume = val.volume;
+      });
+
       return {
         exerciseName: names[eid],
         exerciseId: eid,
         data,
         maxWeight: best.weight_kg,
+        maxVolume,
         totalSessions: counts[eid],
         targetMuscles,
       };
@@ -324,11 +385,155 @@ export default function DashboardPage() {
 
     setStats({ totalLogs: logs.length, uniqueExercises, bestLift, thisWeekLogs, lastWeekLogs, streak });
     setCharts(chartData);
+
+    // Rest & Recovery calculations
+    let lastLogTime = 0;
+    logs.forEach((l: any) => {
+      const t = new Date(l.created_at || (l.logged_at + 'T12:00:00Z')).getTime();
+      if (t > lastLogTime) {
+        lastLogTime = t;
+      }
+    });
+    if (lastLogTime > 0) {
+      const hours = (Date.now() - lastLogTime) / 3600000;
+      setHoursSinceLastLog(hours);
+      const recPercent = Math.min(100, Math.max(0, Math.floor((hours / 36) * 100)));
+      setRecovery(recPercent);
+    } else {
+      setHoursSinceLastLog(null);
+      setRecovery(100);
+    }
+
+    // Muscle Fatigue Score calculations
+    const fatigueScoresObj: Record<MuscleKey, number> = {} as any;
+    allMuscleKeys.forEach(m => { fatigueScoresObj[m] = 0; });
+
+    const logsByMuscle: Record<MuscleKey, any[]> = {} as any;
+    allMuscleKeys.forEach(m => { logsByMuscle[m] = []; });
+
+    logs.forEach((log: any) => {
+      const muscles = getMusclesForExercise(log.exercises?.name || '', log.exercises?.target_muscles);
+      muscles.forEach(m => {
+        if (logsByMuscle[m]) {
+          logsByMuscle[m].push(log);
+        }
+      });
+    });
+
+    const nowTime = new Date();
+    allMuscleKeys.forEach(m => {
+      const mLogs = logsByMuscle[m];
+      if (mLogs.length === 0) {
+        fatigueScoresObj[m] = 0;
+        return;
+      }
+
+      mLogs.sort((a, b) => {
+        const tA = new Date(a.created_at || (a.logged_at + 'T12:00:00Z')).getTime();
+        const tB = new Date(b.created_at || (b.logged_at + 'T12:00:00Z')).getTime();
+        return tA - tB;
+      });
+
+      let fatigue = 0;
+      let prevTime: Date | null = null;
+
+      for (const log of mLogs) {
+        const logTime = new Date(log.created_at || (log.logged_at + 'T12:00:00Z'));
+        if (prevTime !== null) {
+          const hours = (logTime.getTime() - prevTime.getTime()) / 3600000;
+          if (hours > 0) {
+            fatigue = fatigue * Math.pow(0.5, hours / 24);
+          }
+        }
+        fatigue = Math.min(100, fatigue + 25);
+        prevTime = logTime;
+      }
+
+      if (prevTime !== null) {
+        const hours = (nowTime.getTime() - prevTime.getTime()) / 3600000;
+        if (hours > 0) {
+          fatigue = fatigue * Math.pow(0.5, hours / 24);
+        }
+      }
+
+      fatigueScoresObj[m] = Math.round(fatigue);
+    });
+    setFatigueScores(fatigueScoresObj);
+
+    // PR Milestone calculations
+    const milestonesList: Milestone[] = [];
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const logsByExercise: Record<string, any[]> = {};
+    logs.forEach((l: any) => {
+      if (!logsByExercise[l.exercise_id]) logsByExercise[l.exercise_id] = [];
+      logsByExercise[l.exercise_id].push(l);
+    });
+
+    Object.entries(logsByExercise).forEach(([eid, eLogs]) => {
+      eLogs.sort((a: any, b: any) => {
+        const tA = new Date(a.created_at || (a.logged_at + 'T12:00:00Z')).getTime();
+        const tB = new Date(b.created_at || (b.logged_at + 'T12:00:00Z')).getTime();
+        return tA - tB;
+      });
+
+      let prevMax = 0;
+      eLogs.forEach((log: any) => {
+        const logTime = new Date(log.created_at || (log.logged_at + 'T12:00:00Z'));
+        const isRecent = logTime.getTime() >= sevenDaysAgo.getTime();
+
+        if (log.weight_kg > prevMax) {
+          if (isRecent && prevMax > 0) {
+            const diff = log.weight_kg - prevMax;
+            const diffTime = Date.now() - logTime.getTime();
+            const d = Math.floor(diffTime / 86400000);
+            const h = Math.floor((diffTime % 86400000) / 3600000);
+            const timeAgo = d > 0 ? `${d}d ago` : h > 0 ? `${h}h ago` : 'recently';
+
+            milestonesList.push({
+              type: 'pr',
+              title: '🏆 New Personal Record!',
+              message: `You reached ${log.weight_kg}kg on ${log.exercises?.name || 'Exercise'} (a +${diff}kg increase) ${timeAgo}!`,
+              timestamp: logTime.getTime(),
+              meta: { exerciseName: log.exercises?.name, weight: log.weight_kg, diff }
+            });
+          }
+          prevMax = log.weight_kg;
+        }
+      });
+    });
+
+    if (streak >= 3) {
+      milestonesList.push({
+        type: 'streak',
+        title: '🔥 Consistency Milestone!',
+        message: `You reached an active ${streak}-day workout streak! Keep pushing!`,
+        timestamp: Date.now(),
+        meta: { streak }
+      });
+    }
+
+    const hitCountThisWeek = 16 - leftMusclesList.length;
+    if (hitCountThisWeek >= 4) {
+      milestonesList.push({
+        type: 'muscle',
+        title: '⚡ Muscle Mastery!',
+        message: `You hit ${hitCountThisWeek} out of 16 muscle groups this week. Exceptional balance!`,
+        timestamp: Date.now() - 1000,
+        meta: { hitCount: hitCountThisWeek }
+      });
+    }
+
+    milestonesList.sort((a, b) => b.timestamp - a.timestamp);
+    setRecentMilestones(milestonesList.slice(0, 4));
+
     setLoading(false);
   };
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
+      const isVol = chartMetric === 'volume';
       return (
         <div style={{
           background: 'var(--bg-secondary)',
@@ -339,7 +544,10 @@ export default function DashboardPage() {
           boxShadow: 'var(--shadow-card)',
         }}>
           <p style={{ color: 'var(--text-secondary)', marginBottom: 4 }}>{label}</p>
-          <p style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{payload[0].value} kg</p>
+          <p style={{ color: 'var(--text-primary)', fontWeight: 700 }}>
+            {isVol ? 'Total Volume: ' : 'Max Weight: '}
+            <span style={{ color: isVol ? 'var(--accent-cyan)' : 'var(--accent-purple)' }}>{payload[0].value} kg</span>
+          </p>
         </div>
       );
     }
@@ -355,6 +563,19 @@ export default function DashboardPage() {
   }
 
   const weekDelta = stats.thisWeekLogs - stats.lastWeekLogs;
+
+  const gridDates = getHeatmapGrid();
+  const monthLabels: { label: string; index: number }[] = [];
+  let prevMonth = -1;
+  gridDates.forEach((d, i) => {
+    if (i % 7 === 0) {
+      const month = d.getMonth();
+      if (month !== prevMonth) {
+        monthLabels.push({ label: d.toLocaleDateString(undefined, { month: 'short' }), index: Math.floor(i / 7) });
+        prevMonth = month;
+      }
+    }
+  });
 
   return (
     <div className="animate-fade-in-up">
@@ -484,6 +705,126 @@ export default function DashboardPage() {
         </button>
       </div>
 
+      {/* 📅 Consistency Heatmap Card */}
+      <div className="card animate-fade-in-up" style={{
+        marginBottom: 28,
+        animationDelay: '0.21s',
+        border: '1px solid var(--border-color)',
+        padding: 24,
+        borderRadius: 'var(--radius-lg)',
+        background: theme === 'light'
+          ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(245, 245, 250, 0.9))'
+          : 'linear-gradient(135deg, rgba(14, 14, 22, 0.8), rgba(20, 20, 30, 0.8))',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+          <Calendar size={18} style={{ color: 'var(--accent-purple)' }} />
+          <div>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Workout Consistency</h3>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '2px 0 0 0' }}>Your training frequency over the past year</p>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 6 }} className="no-scrollbar">
+          {/* Day labels on the left */}
+          <div style={{
+            display: 'grid',
+            gridTemplateRows: 'repeat(7, 10px)',
+            gap: '3px',
+            padding: '18px 0 4px',
+            fontSize: 9,
+            color: 'var(--text-muted)',
+            textAlign: 'right',
+            lineHeight: '10px',
+            width: 24,
+            flexShrink: 0
+          }}>
+            <div></div>
+            <div>Mon</div>
+            <div></div>
+            <div>Wed</div>
+            <div></div>
+            <div>Fri</div>
+            <div></div>
+          </div>
+
+          {/* Month labels + grid on the right */}
+          <div style={{ overflowX: 'auto', flex: 1, minWidth: 686 }} className="no-scrollbar">
+            {/* Month Labels */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(53, 10px)',
+              gap: '3px',
+              fontSize: 9,
+              color: 'var(--text-muted)',
+              marginBottom: 4
+            }}>
+              {Array.from({ length: 53 }).map((_, i) => {
+                const labelObj = monthLabels.find(l => l.index === i);
+                return (
+                  <div key={i} style={{ gridColumnStart: i + 1, gridColumnEnd: i + 3, whiteSpace: 'nowrap' }}>
+                    {labelObj ? labelObj.label : ''}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Heatmap Grid */}
+            <div style={{
+              display: 'grid',
+              gridTemplateRows: 'repeat(7, 10px)',
+              gridAutoFlow: 'column',
+              gap: '3px'
+            }}>
+              {gridDates.map((d, idx) => {
+                const dStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                const count = dailyLogCounts[dStr] || 0;
+                const opacity = count === 0 ? 1 : count === 1 ? 0.35 : count === 2 ? 0.6 : count === 3 ? 0.8 : 1.0;
+                const color = 'var(--accent-purple)';
+                return (
+                  <div
+                    key={idx}
+                    onMouseEnter={(e) => {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      setHoveredDay({
+                        date: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }),
+                        count,
+                        x: rect.left + window.scrollX + rect.width / 2,
+                        y: rect.top + window.scrollY - 38
+                      });
+                    }}
+                    onMouseLeave={() => setHoveredDay(null)}
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: 2,
+                      background: count === 0
+                        ? (theme === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.04)')
+                        : color,
+                      opacity,
+                      boxShadow: count > 3 ? `0 0 6px ${color}` : 'none',
+                      cursor: 'pointer',
+                      transition: 'transform 0.1s ease, background-color 0.2s',
+                    }}
+                    className="heatmap-cell"
+                  />
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Legend */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, marginTop: 12, fontSize: 10, color: 'var(--text-muted)' }}>
+          <span>Less</span>
+          <div style={{ width: 10, height: 10, borderRadius: 2, background: theme === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.04)' }} />
+          <div style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--accent-purple)', opacity: 0.35 }} />
+          <div style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--accent-purple)', opacity: 0.6 }} />
+          <div style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--accent-purple)', opacity: 0.8 }} />
+          <div style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--accent-purple)', opacity: 1.0, boxShadow: '0 0 4px var(--accent-purple)' }} />
+          <span>More</span>
+        </div>
+      </div>
+
       {/* Weekly Muscle Suggestion Board */}
       <div className="card animate-fade-in-up" style={{
         marginBottom: 28,
@@ -606,6 +947,146 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+      {/* ⚡ Recovery & Muscle Fatigue Status Card */}
+      <div className="card animate-fade-in-up" style={{
+        marginBottom: 28,
+        animationDelay: '0.23s',
+        border: '1px solid var(--border-color)',
+        background: theme === 'light'
+          ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(245, 245, 250, 0.9))'
+          : 'linear-gradient(135deg, rgba(14, 14, 22, 0.8), rgba(20, 20, 30, 0.8))',
+        padding: 24,
+        borderRadius: 'var(--radius-lg)',
+      }}>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))',
+          gap: 32
+        }}>
+          {/* Left: Rest & Recovery Ring */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', paddingRight: 8 }}>
+            <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 20, alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Flame size={18} style={{ color: 'var(--accent-orange)' }} />
+              Rest & Recovery Status
+            </h3>
+            
+            <div style={{ position: 'relative', width: 120, height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg width="120" height="120" viewBox="0 0 100 100">
+                <defs>
+                  <linearGradient id="rec-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor={recovery < 40 ? '#ef4444' : recovery < 80 ? '#c084fc' : '#00f5ff'} />
+                    <stop offset="100%" stopColor={recovery < 40 ? '#f97316' : recovery < 80 ? '#a855f7' : '#10b981'} />
+                  </linearGradient>
+                </defs>
+                <circle cx="50" cy="50" r="40" stroke="rgba(255,255,255,0.05)" strokeWidth="6" fill="transparent" />
+                <circle cx="50" cy="50" r="40" stroke="url(#rec-gradient)" strokeWidth="6" fill="transparent"
+                        strokeDasharray={2 * Math.PI * 40}
+                        strokeDashoffset={2 * Math.PI * 40 * (1 - recovery / 100)}
+                        strokeLinecap="round"
+                        transform="rotate(-90 50 50)"
+                        style={{ transition: 'stroke-dashoffset 0.8s ease-out' }} />
+              </svg>
+              <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <span style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)' }}>{recovery}%</span>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  {recovery < 40 ? 'Fatigued' : recovery < 80 ? 'Recovering' : 'Prime'}
+                </span>
+              </div>
+            </div>
+            
+            <div style={{ marginTop: 16, textAlign: 'center' }}>
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>
+                {hoursSinceLastLog !== null ? (
+                  <>Last workout was <strong>{Math.round(hoursSinceLastLog)} hours</strong> ago</>
+                ) : (
+                  <>Ready to start your training journey!</>
+                )}
+              </p>
+              <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, maxWidth: 260, marginInline: 'auto' }}>
+                {recovery < 40 ? 'Your body is working hard to rebuild. Focus on sleep, hydration, and active stretching today.' :
+                 recovery < 80 ? 'Good recovery progress. You can perform light training or target fresh muscle groups today.' :
+                 'Your systems are fully primed for maximum overload. Perfect day to push for a new Personal Best!'}
+              </p>
+            </div>
+          </div>
+
+          {/* Right: Muscle Fatigue Scores */}
+          <div>
+            <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Target size={18} style={{ color: 'var(--accent-cyan)' }} />
+              Muscle Fatigue Scores
+            </h3>
+            
+            {/* Fatigued muscles list */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {Object.entries(fatigueScores)
+                .filter(([, score]) => score > 10)
+                .sort(([, a], [, b]) => b - a)
+                .slice(0, 4) // show top 4 fatigued
+                .map(([m, score]) => {
+                  const meta = MUSCLE_META[m as MuscleKey];
+                  return (
+                    <div key={m} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                        <span style={{ fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: meta.color }} />
+                          {meta.label}
+                        </span>
+                        <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>{score}% fatigued</span>
+                      </div>
+                      <div style={{ width: '100%', height: 6, background: 'rgba(255,255,255,0.05)', borderRadius: 3, overflow: 'hidden' }}>
+                        <div style={{
+                          width: `${score}%`,
+                          height: '100%',
+                          background: `linear-gradient(90deg, ${meta.color}, #ef4444)`,
+                          borderRadius: 3
+                        }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              
+              {/* If no fatigued muscles */}
+              {Object.values(fatigueScores).filter(s => s > 10).length === 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.1)', borderRadius: 10, padding: 12, fontSize: 12, color: 'var(--accent-green)' }}>
+                  <span>🌟</span>
+                  <span>All muscle groups are fully recovered and fresh!</span>
+                </div>
+              )}
+
+              {/* Fresh muscles sub-list */}
+              <div style={{ marginTop: 14 }}>
+                <h4 style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  Fresh & Ready Muscles
+                </h4>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {Object.entries(fatigueScores)
+                    .filter(([, score]) => score <= 10)
+                    .map(([m]) => {
+                      const meta = MUSCLE_META[m as MuscleKey];
+                      return (
+                        <span key={m} style={{
+                          fontSize: 10,
+                          padding: '3px 8px',
+                          borderRadius: 20,
+                          background: 'rgba(16, 185, 129, 0.08)',
+                          color: 'var(--accent-green)',
+                          border: '1px solid rgba(16, 185, 129, 0.15)',
+                          fontWeight: 500
+                        }}>
+                          {meta.label}
+                        </span>
+                      );
+                    })}
+                  {Object.values(fatigueScores).filter(s => s <= 10).length === 0 && (
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>None - all muscles currently training/fatigued.</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Recent Community Log */}
       {recentLog && (
@@ -650,6 +1131,66 @@ export default function DashboardPage() {
         </button>
       )}
 
+      {/* 🏆 PR Milestone Feed */}
+      <div className="card animate-fade-in-up" style={{
+        marginBottom: 28,
+        animationDelay: '0.27s',
+        border: '1px solid var(--border-color)',
+        background: theme === 'light'
+          ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(245, 245, 250, 0.9))'
+          : 'linear-gradient(135deg, rgba(14, 14, 22, 0.8), rgba(20, 20, 30, 0.8))',
+        padding: 24,
+        borderRadius: 'var(--radius-lg)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+          <Trophy size={18} style={{ color: 'var(--accent-orange)' }} />
+          <div>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Achievements & Milestones</h3>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '2px 0 0 0' }}>Celebrating your latest strength and consistency achievements</p>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {recentMilestones.map((m, idx) => (
+            <div key={idx} style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 14,
+              background: theme === 'light' ? 'rgba(0,0,0,0.015)' : 'rgba(255,255,255,0.015)',
+              border: '1px solid var(--border-color)',
+              borderRadius: 12,
+              padding: '12px 16px',
+            }}>
+              <div style={{
+                width: 36,
+                height: 36,
+                borderRadius: '50%',
+                background: m.type === 'pr' ? 'rgba(245,158,11,0.1)' : m.type === 'streak' ? 'rgba(249,115,22,0.1)' : 'rgba(0,245,255,0.1)',
+                color: m.type === 'pr' ? 'var(--accent-orange)' : m.type === 'streak' ? 'var(--accent-orange)' : 'var(--accent-cyan)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                {m.type === 'pr' ? <Award size={18} /> : m.type === 'streak' ? <Flame size={18} /> : <Target size={18} />}
+              </div>
+              <div style={{ flex: 1 }}>
+                <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>{m.title}</h4>
+                <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '2px 0 0 0', lineHeight: 1.4 }}>{m.message}</p>
+              </div>
+            </div>
+          ))}
+
+          {recentMilestones.length === 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 0', color: 'var(--text-muted)' }}>
+              <Trophy size={32} style={{ opacity: 0.25, marginBottom: 8 }} />
+              <p style={{ fontSize: 13, margin: 0 }}>No achievements logged in the last 7 days.</p>
+              <p style={{ fontSize: 11, opacity: 0.7, margin: '2px 0 0 0' }}>Hit a new personal record or build your streak to unlock achievements!</p>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Charts */}
       {charts.length === 0 ? (
         <div className="card empty-state">
@@ -661,91 +1202,140 @@ export default function DashboardPage() {
           </button>
         </div>
       ) : (
-        <div className="dash-charts">
-          {charts.map((chart) => {
-            const chartColor = getExerciseColor(chart.exerciseName, chart.targetMuscles);
-            return (
-            <div
-              key={chart.exerciseName}
-              className="card dash-stat animate-fade-in-up"
-              style={{ padding: '20px 20px 16px' }}
-            >
-              {/* Chart header */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                <h3 style={{ fontSize: 15, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: chartColor, display: 'inline-block', flexShrink: 0 }} />
-                  {chart.exerciseName}
-                </h3>
-                <button
-                  className="dash-chart-log-btn"
-                  onClick={() => {
-                    setLogPopupExercise({ id: chart.exerciseId, name: chart.exerciseName, targetMuscles: chart.targetMuscles });
-                    setLogWeight('');
-                    setLogReps('');
-                    setLogDate(new Date().toISOString().split('T')[0]);
-                    setLogError('');
-                    setLogSuccess('');
-                  }}
-                  title={`Log ${chart.exerciseName}`}
-                  style={{ '--btn-color': chartColor } as React.CSSProperties}
-                >
-                  <Plus size={13} /> Log
-                </button>
-              </div>
-
-              {/* Mini stats row */}
-              <div className="dash-chart-meta">
-                <span className="dash-chart-meta-item" title="Personal Best (Maximum weight lifted)">
-                  <Award size={11} style={{ color: chartColor }} />
-                  PB: <strong>{chart.maxWeight}kg</strong>
-                </span>
-                <span className="dash-chart-meta-item">
-                  <Calendar size={11} style={{ color: 'var(--text-muted)' }} />
-                  {chart.totalSessions} sessions
-                </span>
-              </div>
-
-              <ResponsiveContainer width="100%" height={chartHeight}>
-                <AreaChart data={chart.data} margin={{ top: 4, right: 6, left: compactAxis ? -24 : -4, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id={`grad-${chart.exerciseId}`} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={chartColor} stopOpacity={0.18} />
-                      <stop offset="95%" stopColor={chartColor} stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-                  <XAxis
-                    dataKey="date"
-                    tick={{ fill: '#55556a', fontSize: 10 }}
-                    axisLine={{ stroke: 'rgba(255,255,255,0.06)' }}
-                    tickLine={false}
-                    minTickGap={compactAxis ? 28 : 12}
-                    tickFormatter={(v) => { const d = new Date(v); return `${d.getDate()}/${d.getMonth() + 1}`; }}
-                  />
-                  <YAxis
-                    tick={{ fill: '#55556a', fontSize: 10 }}
-                    axisLine={{ stroke: 'rgba(255,255,255,0.06)' }}
-                    tickLine={false}
-                    width={compactAxis ? 30 : 38}
-                    unit="kg"
-                  />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Area
-                    type="monotone"
-                    dataKey="weight"
-                    stroke={chartColor}
-                    strokeWidth={2}
-                    fill={`url(#grad-${chart.exerciseId})`}
-                    dot={{ r: 3, fill: chartColor, strokeWidth: 0 }}
-                    activeDot={{ r: 5, stroke: chartColor, strokeWidth: 2, fill: 'var(--bg-primary)' }}
-                    isAnimationActive
-                    animationDuration={900}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Charts Header with Toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Progress Charts</h2>
+            <div style={{
+              display: 'flex',
+              background: theme === 'light' ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.03)',
+              border: '1px solid var(--border-color)',
+              padding: 2,
+              borderRadius: 8,
+            }}>
+              <button
+                onClick={() => setChartMetric('pb')}
+                style={{
+                  background: chartMetric === 'pb' ? 'var(--bg-secondary)' : 'transparent',
+                  color: chartMetric === 'pb' ? 'var(--text-primary)' : 'var(--text-muted)',
+                  border: 'none',
+                  padding: '5px 12px',
+                  borderRadius: 6,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  boxShadow: chartMetric === 'pb' ? 'var(--shadow-card)' : 'none',
+                }}
+              >
+                Max Weight (PB)
+              </button>
+              <button
+                onClick={() => setChartMetric('volume')}
+                style={{
+                  background: chartMetric === 'volume' ? 'var(--bg-secondary)' : 'transparent',
+                  color: chartMetric === 'volume' ? 'var(--text-primary)' : 'var(--text-muted)',
+                  border: 'none',
+                  padding: '5px 12px',
+                  borderRadius: 6,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  boxShadow: chartMetric === 'volume' ? 'var(--shadow-card)' : 'none',
+                }}
+              >
+                Total Volume
+              </button>
             </div>
-            );
-          })}
+          </div>
+
+          <div className="dash-charts">
+            {charts.map((chart) => {
+              const chartColor = getExerciseColor(chart.exerciseName, chart.targetMuscles);
+              return (
+              <div
+                key={chart.exerciseName}
+                className="card dash-stat animate-fade-in-up"
+                style={{ padding: '20px 20px 16px' }}
+              >
+                {/* Chart header */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                  <h3 style={{ fontSize: 15, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: chartColor, display: 'inline-block', flexShrink: 0 }} />
+                    {chart.exerciseName}
+                  </h3>
+                  <button
+                    className="dash-chart-log-btn"
+                    onClick={() => {
+                      setLogPopupExercise({ id: chart.exerciseId, name: chart.exerciseName, targetMuscles: chart.targetMuscles });
+                      setLogWeight('');
+                      setLogReps('');
+                      setLogDate(new Date().toISOString().split('T')[0]);
+                      setLogError('');
+                      setLogSuccess('');
+                    }}
+                    title={`Log ${chart.exerciseName}`}
+                    style={{ '--btn-color': chartColor } as React.CSSProperties}
+                  >
+                    <Plus size={13} /> Log
+                  </button>
+                </div>
+
+                {/* Mini stats row */}
+                <div className="dash-chart-meta">
+                  <span className="dash-chart-meta-item" title={chartMetric === 'pb' ? "Personal Best (Maximum weight lifted)" : "Max Day Volume"}>
+                    <Award size={11} style={{ color: chartColor }} />
+                    {chartMetric === 'pb' ? <>PB: <strong>{chart.maxWeight}kg</strong></> : <>Max Vol: <strong>{chart.maxVolume}kg</strong></>}
+                  </span>
+                  <span className="dash-chart-meta-item">
+                    <Calendar size={11} style={{ color: 'var(--text-muted)' }} />
+                    {chart.totalSessions} sessions
+                  </span>
+                </div>
+
+                <ResponsiveContainer width="100%" height={chartHeight}>
+                  <AreaChart data={chart.data} margin={{ top: 4, right: 6, left: compactAxis ? -24 : -4, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id={`grad-${chart.exerciseId}`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={chartColor} stopOpacity={0.18} />
+                        <stop offset="95%" stopColor={chartColor} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fill: '#55556a', fontSize: 10 }}
+                      axisLine={{ stroke: 'rgba(255,255,255,0.06)' }}
+                      tickLine={false}
+                      minTickGap={compactAxis ? 28 : 12}
+                      tickFormatter={(v) => { const d = new Date(v); return `${d.getDate()}/${d.getMonth() + 1}`; }}
+                    />
+                    <YAxis
+                      tick={{ fill: '#55556a', fontSize: 10 }}
+                      axisLine={{ stroke: 'rgba(255,255,255,0.06)' }}
+                      tickLine={false}
+                      width={compactAxis ? 30 : 38}
+                      unit="kg"
+                    />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Area
+                      type="monotone"
+                      dataKey={chartMetric === 'pb' ? 'weight' : 'volume'}
+                      stroke={chartColor}
+                      strokeWidth={2}
+                      fill={`url(#grad-${chart.exerciseId})`}
+                      dot={{ r: 3, fill: chartColor, strokeWidth: 0 }}
+                      activeDot={{ r: 5, stroke: chartColor, strokeWidth: 2, fill: 'var(--bg-primary)' }}
+                      isAnimationActive
+                      animationDuration={900}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
