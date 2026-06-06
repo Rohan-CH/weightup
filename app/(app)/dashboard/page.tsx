@@ -232,9 +232,23 @@ export default function DashboardPage() {
 
     const activeDays = new Set(logs.map((l: any) => l.logged_at));
     let streak = 0;
+    let restDayUsed = false;
     const cursor = new Date(today);
+    // If today has no log, step back one day (grace for "haven't logged yet today")
     if (!activeDays.has(dayStr(cursor))) cursor.setDate(cursor.getDate() - 1);
-    while (activeDays.has(dayStr(cursor))) { streak++; cursor.setDate(cursor.getDate() - 1); }
+    while (true) {
+      if (activeDays.has(dayStr(cursor))) {
+        streak++;
+        restDayUsed = false;
+        cursor.setDate(cursor.getDate() - 1);
+      } else if (!restDayUsed) {
+        // Allow one rest day — skip it but don't count it
+        restDayUsed = true;
+        cursor.setDate(cursor.getDate() - 1);
+      } else {
+        break; // Two consecutive missed days — streak ends
+      }
+    }
 
     setStats({ totalLogs: logs.length, uniqueExercises, bestLift, thisWeekLogs, lastWeekLogs, streak });
     setCharts(chartData);
