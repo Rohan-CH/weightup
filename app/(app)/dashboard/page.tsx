@@ -1,5 +1,7 @@
 'use client';
 
+import { createPortal } from 'react-dom';
+
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
@@ -120,9 +122,12 @@ export default function DashboardPage() {
   const [chartHeight, setChartHeight] = useState(200);
   const [compactAxis, setCompactAxis] = useState(false);
   const [openDrawer, setOpenDrawer] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
   const router = useRouter();
   const supabase = createClient();
   const { ripples: bestRipples, trigger: triggerBest } = useRipple();
+
+  useEffect(() => { setMounted(true); }, []);
 
   useEffect(() => {
     fetchDashboardData();
@@ -497,121 +502,126 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ---- Drawers ---- */}
+      {/* ---- Drawers (portalled to document.body to escape stacking context) ---- */}
 
-      {openDrawer === 'streak' && (
-        <StatDrawer title="🔥 Your Streak" onClose={() => setOpenDrawer(null)}>
-          <div className="dash-drawer-stat-big" style={{ color: 'var(--accent-orange)' }}>
-            {stats.streak} days
-          </div>
-          <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 20 }}>
-            You&apos;ve trained on <strong style={{ color: 'var(--text-primary)' }}>{stats.streak}</strong> consecutive
-            {stats.streak === 1 ? ' day' : ' days'}. Keep pushing — consistency is everything.
-          </p>
-          <button className="btn-primary" style={{ width: '100%' }} onClick={() => { setOpenDrawer(null); router.push('/log'); }}>
-            <Plus size={16} /> Log Today&apos;s Workout
-          </button>
-        </StatDrawer>
-      )}
-
-      {openDrawer === 'logs' && (
-        <StatDrawer title="📋 All Logs" onClose={() => setOpenDrawer(null)}>
-          <div className="dash-drawer-stat-big">{stats.totalLogs}</div>
-          <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 8 }}>
-            Total workout sets logged across all exercises.
-          </p>
-          <div className="dash-drawer-row">
-            <span style={{ color: 'var(--text-muted)' }}>This week</span>
-            <strong>{stats.thisWeekLogs} sets</strong>
-          </div>
-          <div className="dash-drawer-row">
-            <span style={{ color: 'var(--text-muted)' }}>Last week</span>
-            <strong>{stats.lastWeekLogs} sets</strong>
-          </div>
-          <div className="dash-drawer-row">
-            <span style={{ color: 'var(--text-muted)' }}>Change</span>
-            <strong style={{ color: weekDelta >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>
-              {weekDelta >= 0 ? '+' : ''}{weekDelta}
-            </strong>
-          </div>
-          <button className="btn-primary" style={{ width: '100%', marginTop: 20 }} onClick={() => { setOpenDrawer(null); router.push('/log'); }}>
-            <Plus size={16} /> Log New Set
-          </button>
-        </StatDrawer>
-      )}
-
-      {openDrawer === 'week' && (
-        <StatDrawer title="📅 This Week" onClose={() => setOpenDrawer(null)}>
-          <div className="dash-drawer-stat-big">{stats.thisWeekLogs}</div>
-          <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 16 }}>
-            Sets logged in the last 7 days.
-          </p>
-          <div className="dash-drawer-row">
-            <span style={{ color: 'var(--text-muted)' }}>vs. last week</span>
-            <strong style={{ color: weekDelta >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>
-              {weekDelta >= 0 ? '+' : ''}{weekDelta} sets
-            </strong>
-          </div>
-          {weekDelta < 0 && (
-            <div className="dash-drawer-tip">
-              💡 You logged <strong>{Math.abs(weekDelta)} fewer sets</strong> than last week — time to step it up!
-            </div>
-          )}
-          {weekDelta > 0 && (
-            <div className="dash-drawer-tip" style={{ borderColor: 'rgba(16,185,129,0.3)', background: 'rgba(16,185,129,0.06)', color: 'var(--accent-green)' }}>
-              🎉 You logged <strong>{weekDelta} more sets</strong> than last week — great progress!
-            </div>
-          )}
-          <button className="btn-primary" style={{ width: '100%', marginTop: 20 }} onClick={() => { setOpenDrawer(null); router.push('/log'); }}>
-            <Plus size={16} /> Add a Set
-          </button>
-        </StatDrawer>
-      )}
-
-      {openDrawer === 'exercises' && (
-        <StatDrawer title="🏋️ Tracked Exercises" onClose={() => setOpenDrawer(null)}>
-          <div className="dash-drawer-stat-big">{stats.uniqueExercises}</div>
-          <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 16 }}>
-            Different movements in your training history.
-          </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {personalBests.map((pb, i) => (
-              <div key={pb.name} className="dash-drawer-exercise-row">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: CHART_COLORS[i % CHART_COLORS.length], display: 'inline-block', flexShrink: 0 }} />
-                  <span style={{ fontWeight: 600, fontSize: 14 }}>{pb.name}</span>
-                </div>
-                <span style={{ fontSize: 13, color: 'var(--accent-cyan)', fontWeight: 700 }}>PB {pb.weight}kg</span>
+      {mounted && openDrawer && createPortal(
+        <>
+          {openDrawer === 'streak' && (
+            <StatDrawer title="🔥 Your Streak" onClose={() => setOpenDrawer(null)}>
+              <div className="dash-drawer-stat-big" style={{ color: 'var(--accent-orange)' }}>
+                {stats.streak} days
               </div>
-            ))}
-          </div>
-          <button className="btn-primary" style={{ width: '100%', marginTop: 20 }} onClick={() => { setOpenDrawer(null); router.push('/log'); }}>
-            <Plus size={16} /> Log an Exercise
-          </button>
-        </StatDrawer>
-      )}
+              <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 20 }}>
+                You&apos;ve trained on <strong style={{ color: 'var(--text-primary)' }}>{stats.streak}</strong> consecutive
+                {stats.streak === 1 ? ' day' : ' days'}. Keep pushing — consistency is everything.
+              </p>
+              <button className="btn-primary" style={{ width: '100%' }} onClick={() => { setOpenDrawer(null); router.push('/log'); }}>
+                <Plus size={16} /> Log Today&apos;s Workout
+              </button>
+            </StatDrawer>
+          )}
 
-      {openDrawer === 'bests' && (
-        <StatDrawer title="🏆 Personal Bests" onClose={() => setOpenDrawer(null)}>
-          <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 16 }}>Your all-time personal records.</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {personalBests.map((pb, i) => (
-              <div key={pb.name} className="dash-drawer-pb-row">
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 14 }}>{pb.name}</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{pb.date}</div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: CHART_COLORS[i % CHART_COLORS.length] }}>{pb.weight}kg</div>
-                  {pb.reps && <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>× {pb.reps} reps</div>}
-                </div>
+          {openDrawer === 'logs' && (
+            <StatDrawer title="📋 All Logs" onClose={() => setOpenDrawer(null)}>
+              <div className="dash-drawer-stat-big">{stats.totalLogs}</div>
+              <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 8 }}>
+                Total workout sets logged across all exercises.
+              </p>
+              <div className="dash-drawer-row">
+                <span style={{ color: 'var(--text-muted)' }}>This week</span>
+                <strong>{stats.thisWeekLogs} sets</strong>
               </div>
-            ))}
-          </div>
-          <button className="btn-secondary" style={{ width: '100%', marginTop: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }} onClick={() => { setOpenDrawer(null); router.push('/leaderboard'); }}>
-            <Trophy size={15} /> View Leaderboard <ArrowRight size={14} />
-          </button>
-        </StatDrawer>
+              <div className="dash-drawer-row">
+                <span style={{ color: 'var(--text-muted)' }}>Last week</span>
+                <strong>{stats.lastWeekLogs} sets</strong>
+              </div>
+              <div className="dash-drawer-row">
+                <span style={{ color: 'var(--text-muted)' }}>Change</span>
+                <strong style={{ color: weekDelta >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>
+                  {weekDelta >= 0 ? '+' : ''}{weekDelta}
+                </strong>
+              </div>
+              <button className="btn-primary" style={{ width: '100%', marginTop: 20 }} onClick={() => { setOpenDrawer(null); router.push('/log'); }}>
+                <Plus size={16} /> Log New Set
+              </button>
+            </StatDrawer>
+          )}
+
+          {openDrawer === 'week' && (
+            <StatDrawer title="📅 This Week" onClose={() => setOpenDrawer(null)}>
+              <div className="dash-drawer-stat-big">{stats.thisWeekLogs}</div>
+              <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 16 }}>
+                Sets logged in the last 7 days.
+              </p>
+              <div className="dash-drawer-row">
+                <span style={{ color: 'var(--text-muted)' }}>vs. last week</span>
+                <strong style={{ color: weekDelta >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>
+                  {weekDelta >= 0 ? '+' : ''}{weekDelta} sets
+                </strong>
+              </div>
+              {weekDelta < 0 && (
+                <div className="dash-drawer-tip">
+                  💡 You logged <strong>{Math.abs(weekDelta)} fewer sets</strong> than last week — time to step it up!
+                </div>
+              )}
+              {weekDelta > 0 && (
+                <div className="dash-drawer-tip" style={{ borderColor: 'rgba(16,185,129,0.3)', background: 'rgba(16,185,129,0.06)', color: 'var(--accent-green)' }}>
+                  🎉 You logged <strong>{weekDelta} more sets</strong> than last week — great progress!
+                </div>
+              )}
+              <button className="btn-primary" style={{ width: '100%', marginTop: 20 }} onClick={() => { setOpenDrawer(null); router.push('/log'); }}>
+                <Plus size={16} /> Add a Set
+              </button>
+            </StatDrawer>
+          )}
+
+          {openDrawer === 'exercises' && (
+            <StatDrawer title="🏋️ Tracked Exercises" onClose={() => setOpenDrawer(null)}>
+              <div className="dash-drawer-stat-big">{stats.uniqueExercises}</div>
+              <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 16 }}>
+                Different movements in your training history.
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {personalBests.map((pb, i) => (
+                  <div key={pb.name} className="dash-drawer-exercise-row">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: CHART_COLORS[i % CHART_COLORS.length], display: 'inline-block', flexShrink: 0 }} />
+                      <span style={{ fontWeight: 600, fontSize: 14 }}>{pb.name}</span>
+                    </div>
+                    <span style={{ fontSize: 13, color: 'var(--accent-cyan)', fontWeight: 700 }}>PB {pb.weight}kg</span>
+                  </div>
+                ))}
+              </div>
+              <button className="btn-primary" style={{ width: '100%', marginTop: 20 }} onClick={() => { setOpenDrawer(null); router.push('/log'); }}>
+                <Plus size={16} /> Log an Exercise
+              </button>
+            </StatDrawer>
+          )}
+
+          {openDrawer === 'bests' && (
+            <StatDrawer title="🏆 Personal Bests" onClose={() => setOpenDrawer(null)}>
+              <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 16 }}>Your all-time personal records.</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {personalBests.map((pb, i) => (
+                  <div key={pb.name} className="dash-drawer-pb-row">
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 14 }}>{pb.name}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{pb.date}</div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: CHART_COLORS[i % CHART_COLORS.length] }}>{pb.weight}kg</div>
+                      {pb.reps && <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>× {pb.reps} reps</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button className="btn-secondary" style={{ width: '100%', marginTop: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }} onClick={() => { setOpenDrawer(null); router.push('/leaderboard'); }}>
+                <Trophy size={15} /> View Leaderboard <ArrowRight size={14} />
+              </button>
+            </StatDrawer>
+          )}
+        </>,
+        document.body
       )}
     </div>
   );

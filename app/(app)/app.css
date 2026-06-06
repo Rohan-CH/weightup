@@ -983,3 +983,285 @@
   .dash-ripple { animation: none; }
 }
 
+
+/* ============ MUSCLES PAGE ============ */
+
+/* Week navigation */
+.muscles-week-nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+.muscles-week-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.muscles-week-btn:hover:not(:disabled) {
+  border-color: var(--border-glow);
+  background: var(--bg-card-hover);
+}
+
+.muscles-week-label {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.muscles-week-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: rgba(0, 245, 255, 0.1);
+  color: var(--accent-cyan);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border: 1px solid rgba(0, 245, 255, 0.2);
+}
+
+/* Main layout: diagrams + side panel */
+.muscles-layout {
+  display: grid;
+  grid-template-columns: 1fr 260px;
+  gap: 20px;
+  align-items: start;
+}
+
+.muscles-diagrams {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+}
+
+.muscles-diagram-wrap {
+  flex: 1;
+  max-width: 200px;
+  aspect-ratio: 120 / 285;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  overflow: visible;
+  padding: 12px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Side panel */
+.muscles-side {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  position: sticky;
+  top: 16px;
+}
+
+/* Legend */
+.muscles-legend {
+  padding: 16px;
+}
+
+.muscles-legend-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+.muscles-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 4px 0;
+}
+
+.muscles-legend-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  display: inline-block;
+}
+
+/* Muscle detail card */
+.muscles-detail {
+  padding: 16px;
+}
+
+/* Hint card */
+.muscles-hint {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.muscles-detail-exercise {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  font-size: 13px;
+  gap: 8px;
+}
+
+/* Muscle cards grid */
+.muscles-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 10px;
+}
+
+.muscles-card {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 14px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  font-family: var(--font-family);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.muscles-card:hover {
+  border-color: var(--muscle-color, var(--border-glow));
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.muscles-card.active {
+  border-color: var(--muscle-color, var(--accent-cyan));
+  box-shadow: 0 0 0 1px var(--muscle-color, var(--accent-cyan));
+}
+
+.muscles-card-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.muscles-card-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-bottom: 10px;
+  flex-shrink: 0;
+}
+
+.muscles-card-label {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  margin-bottom: 6px;
+}
+
+.muscles-card-count {
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.muscles-card-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* Exercise breakdown */
+.muscles-exercise-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 14px 18px;
+  transition: border-color var(--transition-fast);
+}
+
+.muscles-exercise-row:hover {
+  border-color: var(--border-glow);
+}
+
+/* Muscle tag chips */
+.muscles-muscle-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  border: 1px solid;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  background: none;
+  font-family: var(--font-family);
+}
+
+.muscles-muscle-tag:hover {
+  transform: scale(1.04);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .muscles-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .muscles-side {
+    position: static;
+  }
+
+  .muscles-diagrams {
+    gap: 10px;
+  }
+
+  .muscles-diagram-wrap {
+    max-width: none;
+    flex: 1;
+  }
+}
+
+@media (max-width: 520px) {
+  .muscles-cards {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .muscles-week-label {
+    font-size: 13px;
+    padding: 8px 12px;
+  }
+}
