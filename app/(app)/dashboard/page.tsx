@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { MuscleKey, MUSCLE_META, getMusclesForExercise } from '@/lib/muscle-utils';
 import {
   TrendingUp, TrendingDown, Dumbbell, Calendar, Award, Flame,
   ChevronRight, Plus, Trophy, Users, X, ArrowRight, BarChart2, Target,
@@ -125,6 +126,8 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<Stats>({ totalLogs: 0, uniqueExercises: 0, bestLift: null, thisWeekLogs: 0, lastWeekLogs: 0, streak: 0 });
   const [recentLog, setRecentLog] = useState<RecentLog | null>(null);
   const [personalBests, setPersonalBests] = useState<PersonalBest[]>([]);
+  const [leftMuscles, setLeftMuscles] = useState<MuscleKey[]>([]);
+  const [hitCount, setHitCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [chartHeight, setChartHeight] = useState(200);
   const [compactAxis, setCompactAxis] = useState(false);
@@ -177,11 +180,16 @@ export default function DashboardPage() {
     // User logs
     const { data: logs } = await supabase
       .from('workout_logs')
-      .select('*, exercises(name)')
+      .select('*, exercises(name, target_muscles)')
       .eq('user_id', user.id)
       .order('logged_at', { ascending: true });
 
-    if (!logs || logs.length === 0) { setLoading(false); return; }
+    if (!logs || logs.length === 0) {
+      setLeftMuscles(Object.keys(MUSCLE_META) as MuscleKey[]);
+      setHitCount(0);
+      setLoading(false);
+      return;
+    }
 
     // Exercise counts + top 5
     const counts: Record<string, number> = {};
@@ -229,6 +237,31 @@ export default function DashboardPage() {
     const twoWeeksAgo = new Date(today); twoWeeksAgo.setDate(today.getDate() - 14);
     const thisWeekLogs = logs.filter((l: any) => l.logged_at >= dayStr(oneWeekAgo)).length;
     const lastWeekLogs = logs.filter((l: any) => l.logged_at >= dayStr(twoWeeksAgo) && l.logged_at < dayStr(oneWeekAgo)).length;
+
+    // Calculate start of current week (Monday)
+    const getWeekStart = (date: Date): Date => {
+      const d = new Date(date);
+      const day = d.getDay();
+      const diff = day === 0 ? -6 : 1 - day;
+      d.setDate(d.getDate() + diff);
+      d.setHours(0, 0, 0, 0);
+      return d;
+    };
+    const wsStr = dayStr(getWeekStart(today));
+
+    // Calculate muscles worked this week (since Monday)
+    const hitMuscles = new Set<MuscleKey>();
+    const thisWeekLogsList = logs.filter((l: any) => l.logged_at >= wsStr);
+    thisWeekLogsList.forEach((l: any) => {
+      const muscles = getMusclesForExercise(l.exercises?.name || '', l.exercises?.target_muscles);
+      muscles.forEach(m => hitMuscles.add(m));
+    });
+
+    const allMuscleKeys = Object.keys(MUSCLE_META) as MuscleKey[];
+    const leftMusclesList = allMuscleKeys.filter(m => !hitMuscles.has(m));
+
+    setLeftMuscles(leftMusclesList);
+    setHitCount(hitMuscles.size);
 
     const activeDays = new Set(logs.map((l: any) => l.logged_at));
     let streak = 0;
@@ -403,6 +436,127 @@ export default function DashboardPage() {
           <div className="stat-value">{stats.bestLift ? <><CountUp value={stats.bestLift.weight} />kg</> : '—'}</div>
           {stats.bestLift && <div className="stat-delta neutral" style={{ color: 'var(--text-secondary)' }}>{stats.bestLift.name}</div>}
         </button>
+      </div>
+
+      {/* Weekly Muscle Suggestion Board */}
+      <div className="card animate-fade-in-up" style={{
+        marginBottom: 28,
+        animationDelay: '0.22s',
+        border: '1px solid rgba(0, 245, 255, 0.12)',
+        background: 'linear-gradient(135deg, rgba(14, 14, 22, 0.8), rgba(20, 20, 30, 0.8))',
+        padding: 24,
+        borderRadius: 'var(--radius-lg)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+          <div>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Target size={18} style={{ color: 'var(--accent-cyan)' }} />
+              Weekly Muscle Suggestion Board
+            </h3>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
+              Keep your training balanced by targeting all muscle groups this week
+            </p>
+          </div>
+          <div style={{
+            fontSize: 13,
+            fontWeight: 600,
+            background: 'rgba(0, 245, 255, 0.08)',
+            color: 'var(--accent-cyan)',
+            padding: '4px 10px',
+            borderRadius: 12,
+            border: '1px solid rgba(0, 245, 255, 0.15)',
+          }}>
+            {hitCount} / 16 Hit
+          </div>
+        </div>
+
+        {/* Progress Bar */}
+        <div style={{
+          width: '100%',
+          height: 6,
+          background: 'rgba(255, 255, 255, 0.05)',
+          borderRadius: 3,
+          overflow: 'hidden',
+          marginBottom: 20
+        }}>
+          <div style={{
+            width: `${(hitCount / 16) * 100}%`,
+            height: '100%',
+            background: 'linear-gradient(90deg, var(--accent-purple), var(--accent-cyan))',
+            borderRadius: 3,
+            transition: 'width 0.5s ease-out',
+            boxShadow: '0 0 8px var(--accent-cyan)'
+          }} />
+        </div>
+
+        {leftMuscles.length === 0 ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(16, 185, 129, 0.06)', border: '1px solid rgba(16, 185, 129, 0.15)', borderRadius: 12, padding: 16 }}>
+            <span style={{ fontSize: 20 }}>🎉</span>
+            <div style={{ fontSize: 14, color: 'var(--accent-green)', fontWeight: 500 }}>
+              Excellent work! You have hit every muscle group this week. Keep up the consistency!
+            </div>
+          </div>
+        ) : (
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 10 }}>
+              Muscles left to hit:
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+              {leftMuscles.map(m => {
+                const meta = MUSCLE_META[m];
+                return (
+                  <div
+                    key={m}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      background: 'rgba(255, 255, 255, 0.02)',
+                      border: `1px solid rgba(255, 255, 255, 0.08)`,
+                      borderRadius: 20,
+                      padding: '6px 12px',
+                      fontSize: 12,
+                      color: 'var(--text-primary)',
+                      transition: 'border-color 0.15s, background 0.15s',
+                    }}
+                  >
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: meta.color, display: 'inline-block', boxShadow: `0 0 5px ${meta.color}` }} />
+                    {meta.label}
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 8,
+              background: 'rgba(124, 58, 237, 0.06)',
+              border: '1px solid rgba(124, 58, 237, 0.15)',
+              borderRadius: 12,
+              padding: 14,
+              fontSize: 13,
+              color: 'var(--text-secondary)',
+              lineHeight: 1.4
+            }}>
+              <span style={{ fontSize: 16, marginTop: -1 }}>💡</span>
+              <div>
+                <strong>Recommendation:</strong> Try adding exercises like{' '}
+                <span style={{ color: 'var(--accent-cyan)', fontWeight: 500 }}>
+                  {leftMuscles.includes('chest') ? 'Bench Press or Cable Flyes' :
+                   leftMuscles.includes('biceps') ? 'Dumbbell Curls or Preacher Curls' :
+                   leftMuscles.includes('quads') ? 'Squats or Leg Presses' :
+                   leftMuscles.includes('lats') ? 'Pull Ups or Lat Pulldowns' :
+                   leftMuscles.includes('hamstrings') ? 'Romanian Deadlifts or Leg Curls' :
+                   leftMuscles.includes('triceps') ? 'Tricep Pushdowns or Skull Crushers' :
+                   leftMuscles.includes('glutes') ? 'Hip Thrusts or Squats' :
+                   leftMuscles.includes('front_delts') || leftMuscles.includes('side_delts') || leftMuscles.includes('rear_delts') ? 'Overhead Press or Lateral Raises' :
+                   'focused movements'}
+                </span>{' '}
+                to target your remaining muscle groups.
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Recent Community Log */}

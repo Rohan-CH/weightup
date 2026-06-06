@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS exercises (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   name TEXT UNIQUE NOT NULL,
   is_custom BOOLEAN DEFAULT false,
+  target_muscles TEXT[] DEFAULT '{}',
   created_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ DEFAULT now()
 );

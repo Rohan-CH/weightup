@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Plus, Trash2, Dumbbell, Search, TrendingUp } from 'lucide-react';
+import { MuscleKey, MUSCLE_META } from '@/lib/muscle-utils';
 import {
   LineChart,
   Line,
@@ -16,6 +17,7 @@ import {
 interface Exercise {
   id: string;
   name: string;
+  target_muscles?: string[] | null;
 }
 
 interface WorkoutLog {
@@ -24,7 +26,7 @@ interface WorkoutLog {
   weight_kg: number;
   reps: number;
   logged_at: string;
-  exercises: { name: string };
+  exercises: { name: string; target_muscles?: string[] | null };
 }
 
 interface ExerciseChart {
@@ -50,6 +52,7 @@ export default function LogWorkoutPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const [newExerciseName, setNewExerciseName] = useState('');
+  const [newExerciseMuscles, setNewExerciseMuscles] = useState<MuscleKey[]>([]);
   const [showNewExercise, setShowNewExercise] = useState(false);
   const [visibleLogsCount, setVisibleLogsCount] = useState(10);
   // emoji reactions left by circle members, keyed by log id
@@ -81,7 +84,7 @@ export default function LogWorkoutPage() {
   const fetchExercises = async () => {
     const { data } = await supabase
       .from('exercises')
-      .select('id, name')
+      .select('id, name, target_muscles')
       .order('name');
     if (data) setExercises(data);
   };
@@ -92,7 +95,7 @@ export default function LogWorkoutPage() {
 
     const { data } = await supabase
       .from('workout_logs')
-      .select('*, exercises(name)')
+      .select('*, exercises(name, target_muscles)')
       .eq('user_id', user.id)
       .order('logged_at', { ascending: false })
       .order('created_at', { ascending: false });
@@ -123,7 +126,7 @@ export default function LogWorkoutPage() {
     // Fetch all logs to build charts and find best lift
     const { data: allLogs } = await supabase
       .from('workout_logs')
-      .select('*, exercises(name)')
+      .select('*, exercises(name, target_muscles)')
       .eq('user_id', user.id)
       .order('logged_at', { ascending: true });
       
@@ -185,7 +188,12 @@ export default function LogWorkoutPage() {
 
     const { data, error } = await supabase
       .from('exercises')
-      .insert({ name: newExerciseName.trim(), is_custom: true, created_by: user.id })
+      .insert({
+        name: newExerciseName.trim(),
+        is_custom: true,
+        created_by: user.id,
+        target_muscles: newExerciseMuscles,
+      })
       .select()
       .single();
 
@@ -200,6 +208,7 @@ export default function LogWorkoutPage() {
       setSearchTerm(data.name);
       setShowNewExercise(false);
       setNewExerciseName('');
+      setNewExerciseMuscles([]);
       setShowDropdown(false);
     }
   };
@@ -365,17 +374,87 @@ export default function LogWorkoutPage() {
           </div>
 
           {showNewExercise && (
-            <div className="form-group" style={{ display: 'flex', gap: 8 }}>
-              <input
-                className="input"
-                placeholder="New exercise name"
-                value={newExerciseName}
-                onChange={(e) => setNewExerciseName(e.target.value)}
-                autoFocus
-              />
-              <button type="button" className="btn-primary" onClick={handleAddExercise} style={{ whiteSpace: 'nowrap' }}>
-                <Plus size={16} /> Add
-              </button>
+            <div style={{
+              border: '1px solid rgba(0, 245, 255, 0.15)',
+              background: 'rgba(255, 255, 255, 0.02)',
+              padding: 16,
+              marginBottom: 16,
+              borderRadius: 'var(--radius-md)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 12
+            }}>
+              <h4 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Plus size={16} style={{ color: 'var(--accent-cyan)' }} />
+                Create Custom Exercise
+              </h4>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="label" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Exercise Name</label>
+                <input
+                  className="input"
+                  placeholder="e.g. Incline DB Hammer Press"
+                  value={newExerciseName}
+                  onChange={(e) => setNewExerciseName(e.target.value)}
+                  autoFocus
+                />
+              </div>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="label" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Target Muscles (Select all that apply)</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 150, overflowY: 'auto', padding: '2px 0' }}>
+                  {(Object.keys(MUSCLE_META) as MuscleKey[]).map(key => {
+                    const selected = newExerciseMuscles.includes(key);
+                    const meta = MUSCLE_META[key];
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => {
+                          setNewExerciseMuscles(prev =>
+                            prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+                          );
+                        }}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: 20,
+                          fontSize: 12,
+                          fontWeight: 500,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                          background: selected ? `${meta.color}20` : 'rgba(255,255,255,0.03)',
+                          color: selected ? meta.color : 'var(--text-muted)',
+                          border: `1px solid ${selected ? meta.color : 'rgba(255,255,255,0.08)'}`,
+                          boxShadow: selected ? `0 0 6px ${meta.color}15` : 'none',
+                        }}
+                      >
+                        {meta.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => {
+                    setShowNewExercise(false);
+                    setNewExerciseName('');
+                    setNewExerciseMuscles([]);
+                  }}
+                  style={{ padding: '6px 12px', fontSize: 12, height: 'auto', minHeight: 0 }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={handleAddExercise}
+                  disabled={!newExerciseName.trim()}
+                  style={{ padding: '6px 12px', fontSize: 12, height: 'auto', minHeight: 0, gap: 4 }}
+                >
+                  <Plus size={14} /> Add Exercise
+                </button>
+              </div>
             </div>
           )}
 
