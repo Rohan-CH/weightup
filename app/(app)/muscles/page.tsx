@@ -355,8 +355,28 @@ export default function MusclesPage() {
   const [logs, setLogs] = useState<WorkoutLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<MuscleKey | null>(null);
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [activeWeeks, setActiveWeeks] = useState<Set<string>>(new Set());
   const router = useRouter();
   const supabase = createClient();
+
+  useEffect(() => {
+    async function fetchActiveWeeks() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase.from('workout_logs').select('logged_at').eq('user_id', user.id);
+      if (data) {
+        const weeks = new Set<string>();
+        data.forEach((d: any) => {
+          const ws = getWeekStart(new Date(d.logged_at + 'T00:00:00'));
+          weeks.add(dayStr(ws));
+        });
+        setActiveWeeks(weeks);
+      }
+    }
+    fetchActiveWeeks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekStart.getDate() + 6);
@@ -436,10 +456,25 @@ export default function MusclesPage() {
         <button className="muscles-week-btn" onClick={() => setWeekStart(d => { const n = new Date(d); n.setDate(d.getDate() - 7); return n; })}>
           <ChevronLeft size={18} />
         </button>
-        <div className="muscles-week-label">
-          <Calendar size={14} style={{ flexShrink: 0 }} />
-          <span>{formatWeekRange(weekStart)}</span>
-          {isCurrentWeek && <span className="muscles-week-badge">This Week</span>}
+        <div style={{ position: 'relative' }}>
+          <button 
+            className="muscles-week-label" 
+            style={{ width: '100%', cursor: 'pointer', textAlign: 'left', display: 'flex' }}
+            onClick={() => setShowCalendar(!showCalendar)}
+          >
+            <Calendar size={14} style={{ flexShrink: 0 }} />
+            <span>{formatWeekRange(weekStart)}</span>
+            {isCurrentWeek && <span className="muscles-week-badge">This Week</span>}
+          </button>
+          
+          {showCalendar && (
+            <WeekCalendar 
+              weekStart={weekStart} 
+              setWeekStart={(d: Date) => { setWeekStart(d); setShowCalendar(false); }} 
+              activeWeeks={activeWeeks} 
+              onClose={() => setShowCalendar(false)} 
+            />
+          )}
         </div>
         <button
           className="muscles-week-btn"
@@ -599,6 +634,80 @@ export default function MusclesPage() {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+function WeekCalendar({ weekStart, setWeekStart, activeWeeks, onClose }: any) {
+  const [month, setMonth] = useState(() => {
+    const d = new Date(weekStart);
+    d.setDate(1);
+    return d;
+  });
+
+  const nextMonth = () => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1));
+  const prevMonth = () => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1));
+
+  const weeks = [];
+  let curr = new Date(month);
+  curr.setDate(1);
+  while (curr.getDay() !== 1) curr.setDate(curr.getDate() - 1); // Rewind to Monday
+  
+  for (let i = 0; i < 6; i++) {
+    const weekDays = [];
+    for (let j = 0; j < 7; j++) {
+      weekDays.push(new Date(curr));
+      curr.setDate(curr.getDate() + 1);
+    }
+    weeks.push(weekDays);
+  }
+
+  return (
+    <div className="card animate-fade-in" style={{ position: 'absolute', top: 50, left: '50%', transform: 'translateX(-50%)', zIndex: 50, width: 280, padding: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <button type="button" onClick={prevMonth} className="btn-secondary" style={{ padding: 4 }}><ChevronLeft size={16} /></button>
+        <span style={{ fontWeight: 600 }}>{month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
+        <button type="button" onClick={nextMonth} className="btn-secondary" style={{ padding: 4 }}><ChevronRight size={16} /></button>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', textAlign: 'center', fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
+        <div>M</div><div>T</div><div>W</div><div>T</div><div>F</div><div>S</div><div>S</div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {weeks.map((days, i) => {
+          const wStart = days[0];
+          const isSelected = dayStr(wStart) === dayStr(weekStart);
+          const hasWorkout = activeWeeks.has(dayStr(wStart));
+          
+          return (
+            <button 
+              key={i} 
+              type="button"
+              onClick={() => setWeekStart(wStart)}
+              style={{
+                display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', 
+                textAlign: 'center', fontSize: 13, padding: '4px 0', 
+                borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+                background: isSelected ? 'var(--accent-purple)' : 'transparent',
+                border: hasWorkout && !isSelected ? '1px solid var(--accent-cyan)' : '1px solid transparent',
+                color: 'var(--text-primary)'
+              }}
+              title={hasWorkout ? 'Workouts logged this week' : 'No workouts this week'}
+            >
+              {days.map(d => (
+                <div key={d.toISOString()} style={{ opacity: d.getMonth() === month.getMonth() ? 1 : 0.3 }}>
+                  {d.getDate()}
+                </div>
+              ))}
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 12, fontSize: 11, color: 'var(--text-muted)' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ width: 8, height: 8, border: '1px solid var(--accent-cyan)', display: 'inline-block' }} /> 
+          Has logs
+        </span>
+      </div>
     </div>
   );
 }

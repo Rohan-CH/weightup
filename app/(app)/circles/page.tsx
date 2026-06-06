@@ -112,6 +112,7 @@ function CirclesPageInner() {
   const [comments, setComments] = useState<Comment[]>([]);
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
   const [feedLoading, setFeedLoading] = useState(false);
+  const [visibleFeedCount, setVisibleFeedCount] = useState(10);
 
   // member detail
   const [activeMember, setActiveMember] = useState<Member | null>(null);
@@ -245,6 +246,7 @@ function CirclesPageInner() {
     setActiveCircle(circle);
     setView('circle');
     setCircleTab('members');
+    setVisibleFeedCount(10);
     setRenaming(false);
     setError('');
     setInviteEmail('');
@@ -389,49 +391,88 @@ function CirclesPageInner() {
     setFeedLoading(true);
     const memberIds = members.map((m) => m.user_id);
 
-    const { data: logs } = await supabase
+    // 1. Fetch recent logs by members
+    const { data: recentLogs } = await supabase
       .from('workout_logs')
-      .select('id, user_id, weight_kg, reps, logged_at, exercises(name), profiles(username, avatar_url)')
+      .select('id, user_id, weight_kg, reps, logged_at, created_at, exercises(name), profiles(username, avatar_url)')
       .in('user_id', memberIds)
       .order('created_at', { ascending: false })
-      .limit(40);
+      .limit(50);
 
-    const feedLogs: FeedLog[] = (logs || []).map((l: any) => ({
-      id: l.id,
-      user_id: l.user_id,
-      username: l.profiles?.username || 'Unknown',
-      avatar_url: l.profiles?.avatar_url || null,
-      exercise_name: l.exercises?.name || 'Unknown',
-      weight_kg: l.weight_kg,
-      reps: l.reps,
-      logged_at: l.logged_at,
-    }));
-    setFeed(feedLogs);
+    // 2. Fetch recent comments by members
+    const { data: recentComments } = await supabase
+      .from('comments')
+      .select('log_id, created_at')
+      .in('user_id', memberIds)
+      .order('created_at', { ascending: false })
+      .limit(50);
 
-    const logIds = feedLogs.map((l) => l.id);
-    if (logIds.length > 0) {
-      const [{ data: rx }, { data: cm }] = await Promise.all([
-        supabase.from('reactions').select('log_id, user_id, emoji').in('log_id', logIds),
-        supabase
-          .from('comments')
-          .select('id, log_id, user_id, body, profiles(username)')
-          .in('log_id', logIds)
-          .order('created_at', { ascending: true }),
-      ]);
-      setReactions((rx as any) || []);
-      setComments(
-        ((cm as any) || []).map((c: any) => ({
-          id: c.id,
-          log_id: c.log_id,
-          user_id: c.user_id,
-          username: c.profiles?.username || 'Unknown',
-          body: c.body,
-        }))
-      );
-    } else {
-      setReactions([]);
-      setComments([]);
+    const logIdsFromLogs = (recentLogs || []).map(l => l.id);
+    const logIdsFromComments = (recentComments || []).map(c => c.log_id);
+    
+    // 3. Find missing logs
+    const missingLogIds = Array.from(new Set(logIdsFromComments)).filter(id => !logIdsFromLogs.includes(id));
+    
+    let extraLogs: any[] = [];
+    if (missingLogIds.length > 0) {
+      const { data } = await supabase
+        .from('workout_logs')
+        .select('id, user_id, weight_kg, reps, logged_at, created_at, exercises(name), profiles(username, avatar_url)')
+        .in('id', missingLogIds);
+      extraLogs = (data || []).filter(l => memberIds.includes(l.user_id));
     }
+
+    const allFeedLogs = [...(recentLogs || []), ...extraLogs];
+    const allLogIds = allFeedLogs.map(l => l.id);
+
+    // 4. Fetch ALL comments and reactions for these logs
+    let rxData = [];
+    let cmData = [];
+    if (allLogIds.length > 0) {
+      const [{ data: rx }, { data: cm }] = await Promise.all([
+        supabase.from('reactions').select('log_id, user_id, emoji').in('log_id', allLogIds),
+        supabase.from('comments').select('id, log_id, user_id, body, created_at, profiles(username)').in('log_id', allLogIds).order('created_at', { ascending: true })
+      ]);
+      rxData = rx as any || [];
+      cmData = cm as any || [];
+    }
+
+    setReactions(rxData);
+    
+    const fetchedComments = cmData.map((c: any) => ({
+      id: c.id,
+      log_id: c.log_id,
+      user_id: c.user_id,
+      username: c.profiles?.username || 'Unknown',
+      body: c.body,
+      created_at: c.created_at,
+    }));
+    setComments(fetchedComments);
+
+    // 5. Calculate last_activity_at and sort
+    const feedWithActivity = allFeedLogs.map((l: any) => {
+      let lastActivity = new Date(l.created_at).getTime();
+      const logComms = fetchedComments.filter(c => c.log_id === l.id);
+      logComms.forEach(c => {
+        const cTime = new Date(c.created_at).getTime();
+        if (cTime > lastActivity) lastActivity = cTime;
+      });
+      return {
+        id: l.id,
+        user_id: l.user_id,
+        username: l.profiles?.username || 'Unknown',
+        avatar_url: l.profiles?.avatar_url || null,
+        exercise_name: l.exercises?.name || 'Unknown',
+        weight_kg: l.weight_kg,
+        reps: l.reps,
+        logged_at: l.logged_at,
+        created_at: l.created_at,
+        last_activity_at: lastActivity
+      };
+    });
+
+    feedWithActivity.sort((a, b) => b.last_activity_at - a.last_activity_at);
+    setFeed(feedWithActivity);
     setFeedLoading(false);
   };
 
@@ -439,6 +480,22 @@ function CirclesPageInner() {
     if (view === 'circle' && circleTab === 'activity') loadFeed();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, circleTab, members]);
+
+  // Infinite scroll observer
+  useEffect(() => {
+    if (view !== 'circle' || circleTab !== 'activity' || feed.length === 0) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setVisibleFeedCount((prev) => Math.min(prev + 10, feed.length));
+        }
+      },
+      { threshold: 0.1 }
+    );
+    const target = document.getElementById('feed-bottom-marker');
+    if (target) observer.observe(target);
+    return () => observer.disconnect();
+  }, [view, circleTab, feed.length]);
 
   // Scroll the highlighted log into view once the feed has loaded.
   useEffect(() => {
@@ -851,7 +908,7 @@ function CirclesPageInner() {
               </div>
             ) : (
               <div style={{ display: 'grid', gap: 16 }}>
-                {feed.map((log) => {
+                {feed.slice(0, visibleFeedCount).map((log) => {
                   const logReactions = reactions.filter((r) => r.log_id === log.id);
                   const logComments = comments.filter((c) => c.log_id === log.id);
                   const highlighted = highlightLog === log.id;
@@ -953,6 +1010,9 @@ function CirclesPageInner() {
                     </div>
                   );
                 })}
+                {visibleFeedCount < feed.length && (
+                  <div id="feed-bottom-marker" style={{ height: 20 }} />
+                )}
               </div>
             )}
           </div>

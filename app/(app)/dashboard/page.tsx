@@ -46,8 +46,15 @@ interface PersonalBest {
   date: string;
 }
 
-const CHART_COLORS = ['#00f5ff', '#7c3aed', '#ec4899', '#10b981', '#f59e0b'];
+const CHART_COLORS = ['#00f5ff', '#7c3aed', '#ec4899', '#10b981', '#f59e0b', '#38bdf8', '#a855f7', '#f43f5e', '#facc15'];
 
+function getExerciseColor(name: string) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return CHART_COLORS[Math.abs(hash) % CHART_COLORS.length];
+}
 function CountUp({ value, suffix = '', duration = 700 }: { value: number; suffix?: string; duration?: number }) {
   const [display, setDisplay] = useState(0);
   const rafRef = useRef<number | null>(null);
@@ -424,23 +431,25 @@ export default function DashboardPage() {
         </div>
       ) : (
         <div className="dash-charts">
-          {charts.map((chart, i) => (
+          {charts.map((chart) => {
+            const chartColor = getExerciseColor(chart.exerciseName);
+            return (
             <div
               key={chart.exerciseName}
               className="card dash-stat animate-fade-in-up"
-              style={{ animationDelay: `${0.1 * (i + 1)}s`, padding: '20px 20px 16px' }}
+              style={{ padding: '20px 20px 16px' }}
             >
               {/* Chart header */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
                 <h3 style={{ fontSize: 15, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: CHART_COLORS[i % CHART_COLORS.length], display: 'inline-block', flexShrink: 0 }} />
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: chartColor, display: 'inline-block', flexShrink: 0 }} />
                   {chart.exerciseName}
                 </h3>
                 <button
                   className="dash-chart-log-btn"
                   onClick={() => router.push('/log')}
                   title={`Log ${chart.exerciseName}`}
-                  style={{ '--btn-color': CHART_COLORS[i % CHART_COLORS.length] } as React.CSSProperties}
+                  style={{ '--btn-color': chartColor } as React.CSSProperties}
                 >
                   <Plus size={13} /> Log
                 </button>
@@ -448,8 +457,8 @@ export default function DashboardPage() {
 
               {/* Mini stats row */}
               <div className="dash-chart-meta">
-                <span className="dash-chart-meta-item">
-                  <Award size={11} style={{ color: CHART_COLORS[i % CHART_COLORS.length] }} />
+                <span className="dash-chart-meta-item" title="Personal Best (Maximum weight lifted)">
+                  <Award size={11} style={{ color: chartColor }} />
                   PB: <strong>{chart.maxWeight}kg</strong>
                 </span>
                 <span className="dash-chart-meta-item">
@@ -461,9 +470,9 @@ export default function DashboardPage() {
               <ResponsiveContainer width="100%" height={chartHeight}>
                 <AreaChart data={chart.data} margin={{ top: 4, right: 6, left: compactAxis ? -24 : -4, bottom: 0 }}>
                   <defs>
-                    <linearGradient id={`grad${i}`} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={CHART_COLORS[i % CHART_COLORS.length]} stopOpacity={0.18} />
-                      <stop offset="95%" stopColor={CHART_COLORS[i % CHART_COLORS.length]} stopOpacity={0} />
+                    <linearGradient id={`grad-${chart.exerciseId}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={chartColor} stopOpacity={0.18} />
+                      <stop offset="95%" stopColor={chartColor} stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
@@ -486,19 +495,19 @@ export default function DashboardPage() {
                   <Area
                     type="monotone"
                     dataKey="weight"
-                    stroke={CHART_COLORS[i % CHART_COLORS.length]}
+                    stroke={chartColor}
                     strokeWidth={2}
-                    fill={`url(#grad${i})`}
-                    dot={{ r: 3, fill: CHART_COLORS[i % CHART_COLORS.length], strokeWidth: 0 }}
-                    activeDot={{ r: 5, stroke: CHART_COLORS[i % CHART_COLORS.length], strokeWidth: 2, fill: 'var(--bg-primary)' }}
+                    fill={`url(#grad-${chart.exerciseId})`}
+                    dot={{ r: 3, fill: chartColor, strokeWidth: 0 }}
+                    activeDot={{ r: 5, stroke: chartColor, strokeWidth: 2, fill: 'var(--bg-primary)' }}
                     isAnimationActive
                     animationDuration={900}
-                    animationBegin={120 * i}
                   />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -582,13 +591,13 @@ export default function DashboardPage() {
                 Different movements in your training history.
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {personalBests.map((pb, i) => (
+                {personalBests.map((pb) => (
                   <div key={pb.name} className="dash-drawer-exercise-row">
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: CHART_COLORS[i % CHART_COLORS.length], display: 'inline-block', flexShrink: 0 }} />
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: getExerciseColor(pb.name), display: 'inline-block', flexShrink: 0 }} />
                       <span style={{ fontWeight: 600, fontSize: 14 }}>{pb.name}</span>
                     </div>
-                    <span style={{ fontSize: 13, color: 'var(--accent-cyan)', fontWeight: 700 }}>PB {pb.weight}kg</span>
+                    <span style={{ fontSize: 13, color: 'var(--accent-cyan)', fontWeight: 700 }} title="Personal Best (Maximum weight lifted)">PB {pb.weight}kg</span>
                   </div>
                 ))}
               </div>
@@ -602,14 +611,17 @@ export default function DashboardPage() {
             <StatDrawer title="🏆 Personal Bests" onClose={() => setOpenDrawer(null)}>
               <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 16 }}>Your all-time personal records.</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {personalBests.map((pb, i) => (
+                {personalBests.map((pb) => (
                   <div key={pb.name} className="dash-drawer-pb-row">
                     <div>
-                      <div style={{ fontWeight: 700, fontSize: 14 }}>{pb.name}</div>
+                      <div style={{ fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: getExerciseColor(pb.name), display: 'inline-block', flexShrink: 0 }} />
+                        {pb.name}
+                      </div>
                       <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{pb.date}</div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: 20, fontWeight: 800, color: CHART_COLORS[i % CHART_COLORS.length] }}>{pb.weight}kg</div>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: getExerciseColor(pb.name) }}>{pb.weight}kg</div>
                       {pb.reps && <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>× {pb.reps} reps</div>}
                     </div>
                   </div>
