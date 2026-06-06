@@ -407,8 +407,8 @@ function CirclesPageInner() {
       .order('created_at', { ascending: false })
       .limit(50);
 
-    const logIdsFromLogs = (recentLogs || []).map(l => l.id);
-    const logIdsFromComments = (recentComments || []).map(c => c.log_id);
+    const logIdsFromLogs = (recentLogs || []).map((l: any) => l.id);
+    const logIdsFromComments = (recentComments || []).map((c: any) => c.log_id);
     
     // 3. Find missing logs
     const missingLogIds = Array.from(new Set(logIdsFromComments)).filter(id => !logIdsFromLogs.includes(id));
@@ -419,11 +419,11 @@ function CirclesPageInner() {
         .from('workout_logs')
         .select('id, user_id, weight_kg, reps, logged_at, created_at, exercises(name), profiles(username, avatar_url)')
         .in('id', missingLogIds);
-      extraLogs = (data || []).filter(l => memberIds.includes(l.user_id));
+      extraLogs = (data || []).filter((l: any) => memberIds.includes(l.user_id));
     }
 
     const allFeedLogs = [...(recentLogs || []), ...extraLogs];
-    const allLogIds = allFeedLogs.map(l => l.id);
+    const allLogIds = allFeedLogs.map((l: any) => l.id);
 
     // 4. Fetch ALL comments and reactions for these logs
     let rxData = [];
@@ -452,8 +452,8 @@ function CirclesPageInner() {
     // 5. Calculate last_activity_at and sort
     const feedWithActivity = allFeedLogs.map((l: any) => {
       let lastActivity = new Date(l.created_at).getTime();
-      const logComms = fetchedComments.filter(c => c.log_id === l.id);
-      logComms.forEach(c => {
+      const logComms = fetchedComments.filter((c: any) => c.log_id === l.id);
+      logComms.forEach((c: any) => {
         const cTime = new Date(c.created_at).getTime();
         if (cTime > lastActivity) lastActivity = cTime;
       });
@@ -471,8 +471,8 @@ function CirclesPageInner() {
       };
     });
 
-    feedWithActivity.sort((a, b) => b.last_activity_at - a.last_activity_at);
-    setFeed(feedWithActivity);
+    const sortedFeed = feedWithActivity.sort((a: any, b: any) => b.last_activity_at - a.last_activity_at);
+    setFeed(sortedFeed);
     setFeedLoading(false);
   };
 
