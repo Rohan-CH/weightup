@@ -607,7 +607,6 @@ export default function DashboardPage() {
       <div className="page-header" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
         <div>
           <h1>Dashboard</h1>
-          <p>Your training overview and progress</p>
         </div>
         {stats.streak > 0 && (
           <button
@@ -734,17 +733,18 @@ export default function DashboardPage() {
         marginBottom: 28,
         animationDelay: '0.21s',
         border: '1px solid var(--border-color)',
-        padding: 24,
+        padding: 16,
         borderRadius: 'var(--radius-lg)',
         background: theme === 'light'
           ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(245, 245, 250, 0.9))'
           : 'linear-gradient(135deg, rgba(14, 14, 22, 0.8), rgba(20, 20, 30, 0.8))',
+        overflow: 'hidden',
+        maxWidth: '100%',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
           <Calendar size={18} style={{ color: 'var(--accent-purple)' }} />
           <div>
-            <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Workout Consistency</h3>
-            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '2px 0 0 0' }}>Your training frequency over the past year</p>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Consistency</h3>
           </div>
         </div>
 
@@ -866,11 +866,8 @@ export default function DashboardPage() {
           <div>
             <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
               <Target size={18} style={{ color: 'var(--accent-cyan)' }} />
-              Weekly Muscle Suggestion Board
+              Muscle Targets
             </h3>
-            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
-              Keep your training balanced by targeting all muscle groups this week
-            </p>
           </div>
           <div style={{
             fontSize: 13,
@@ -908,7 +905,7 @@ export default function DashboardPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(16, 185, 129, 0.06)', border: '1px solid rgba(16, 185, 129, 0.15)', borderRadius: 12, padding: 16 }}>
             <span style={{ fontSize: 20 }}>🎉</span>
             <div style={{ fontSize: 14, color: 'var(--accent-green)', fontWeight: 500 }}>
-              Excellent work! You have hit every muscle group this week. Keep up the consistency!
+              All muscles hit this week!
             </div>
           </div>
         ) : (
@@ -974,7 +971,7 @@ export default function DashboardPage() {
             }}>
               <span style={{ fontSize: 16, marginTop: -1 }}>💡</span>
               <div>
-                <strong>Recommendation:</strong> Try adding exercises like{' '}
+                <strong>Suggestion:</strong> Add{' '}
                 <span style={{ color: 'var(--accent-cyan)', fontWeight: 500 }}>
                   {leftMuscles.includes('chest') ? 'Bench Press or Cable Flyes' :
                    leftMuscles.includes('biceps') ? 'Dumbbell Curls or Preacher Curls' :
@@ -985,8 +982,7 @@ export default function DashboardPage() {
                    leftMuscles.includes('glutes') ? 'Hip Thrusts or Squats' :
                    leftMuscles.includes('front_delts') || leftMuscles.includes('side_delts') || leftMuscles.includes('rear_delts') ? 'Overhead Press or Lateral Raises' :
                    'focused movements'}
-                </span>{' '}
-                to target your remaining muscle groups.
+                </span>
               </div>
             </div>
           </div>
@@ -1012,7 +1008,7 @@ export default function DashboardPage() {
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', paddingRight: 8 }}>
             <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 20, alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 8 }}>
               <Flame size={18} style={{ color: 'var(--accent-orange)' }} />
-              Rest & Recovery Status
+              Recovery
             </h3>
             
             <div style={{ position: 'relative', width: 120, height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1042,15 +1038,15 @@ export default function DashboardPage() {
             <div style={{ marginTop: 16, textAlign: 'center' }}>
               <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>
                 {hoursSinceLastLog !== null ? (
-                  <>Last workout was <strong>{Math.round(hoursSinceLastLog)} hours</strong> ago</>
+                  <>Last workout: <strong>{Math.round(hoursSinceLastLog)}h</strong> ago</>
                 ) : (
-                  <>Ready to start your training journey!</>
+                  <>Ready to start!</>
                 )}
               </p>
-              <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, maxWidth: 260, marginInline: 'auto' }}>
-                {recovery < 40 ? 'Your body is working hard to rebuild. Focus on sleep, hydration, and active stretching today.' :
-                 recovery < 80 ? 'Good recovery progress. You can perform light training or target fresh muscle groups today.' :
-                 'Your systems are fully primed for maximum overload. Perfect day to push for a new Personal Best!'}
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6, maxWidth: 260, marginInline: 'auto' }}>
+                {recovery < 40 ? 'Fatigued. Focus on rest.' :
+                 recovery < 80 ? 'Recovering. Light training OK.' :
+                 'Fully primed. Go for a PR!'}
               </p>
             </div>
           </div>
@@ -1059,7 +1055,7 @@ export default function DashboardPage() {
           <div>
             <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
               <Target size={18} style={{ color: 'var(--accent-cyan)' }} />
-              Muscle Fatigue Scores
+              Fatigue
             </h3>
             
             {/* Fatigued muscles list */}
@@ -1179,8 +1175,7 @@ export default function DashboardPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
           <Trophy size={18} style={{ color: 'var(--accent-orange)' }} />
           <div>
-            <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Achievements & Milestones</h3>
-            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '2px 0 0 0' }}>Celebrating your latest strength and consistency achievements</p>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Achievements</h3>
           </div>
         </div>
 
