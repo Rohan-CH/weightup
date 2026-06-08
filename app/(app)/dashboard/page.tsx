@@ -154,7 +154,7 @@ function StatDrawer({ title, children, onClose }: { title: string; children: Rea
 export default function DashboardPage() {
   const [charts, setCharts] = useState<ExerciseChart[]>([]);
   const [stats, setStats] = useState<Stats>({ totalLogs: 0, uniqueExercises: 0, bestLift: null, thisWeekLogs: 0, lastWeekLogs: 0, streak: 0 });
-  const [recentLog, setRecentLog] = useState<RecentLog | null>(null);
+  const [recentLogs, setRecentLogs] = useState<RecentLog[]>([]);
   const [personalBests, setPersonalBests] = useState<PersonalBest[]>([]);
   const [leftMuscles, setLeftMuscles] = useState<MuscleKey[]>([]);
   const [hitCount, setHitCount] = useState(0);
@@ -221,22 +221,31 @@ export default function DashboardPage() {
         return;
       }
 
-      // Recent global log
+      // Recent global logs
       try {
         const { data: latestLogs } = await supabase
           .from('workout_logs')
           .select('user_id, weight_kg, created_at, exercises(name)')
           .order('created_at', { ascending: false })
-          .limit(1);
+          .limit(4);
         if (latestLogs && latestLogs.length > 0) {
-          const g = latestLogs[0];
-          const { data: profile } = await supabase.from('profiles').select('username, avatar_url').eq('id', g.user_id).single();
-          if (profile) {
+          const userIds = [...new Set(latestLogs.map((l: any) => l.user_id))];
+          const { data: profiles } = await supabase.from('profiles').select('id, username, avatar_url').in('id', userIds);
+          const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+          const logsList = latestLogs.map((g: any) => {
+            const profile = profileMap.get(g.user_id) || {} as any;
             const diff = Date.now() - new Date(g.created_at).getTime();
             const m = Math.floor(diff / 60000), h = Math.floor(m / 60), d = Math.floor(h / 24);
             const timeAgo = d > 0 ? `${d}d ago` : h > 0 ? `${h}h ago` : m > 0 ? `${m}m ago` : 'Just now';
-            setRecentLog({ exerciseName: g.exercises?.name || 'Unknown', weight: g.weight_kg, username: profile.username || 'Unknown', avatar_url: profile.avatar_url, timeAgo });
-          }
+            return {
+              exerciseName: g.exercises?.name || 'Unknown',
+              weight: g.weight_kg,
+              username: profile.username || 'Unknown',
+              avatar_url: profile.avatar_url || null,
+              timeAgo
+            };
+          });
+          setRecentLogs(logsList);
         }
       } catch (e) { console.error(e); }
 
@@ -278,7 +287,7 @@ export default function DashboardPage() {
         counts[l.exercise_id] = (counts[l.exercise_id] || 0) + 1;
         names[l.exercise_id] = l.exercises?.name || 'Unknown';
       });
-      const top5 = Object.entries(counts).sort(([, a], [, b]) => b - a).slice(0, 5).map(([id]) => id);
+      const top5 = Object.entries(counts).sort(([, a], [, b]) => b - a).slice(0, 2).map(([id]) => id);
 
       // Charts + personal bests per exercise
       const pbs: PersonalBest[] = [];
@@ -1053,47 +1062,54 @@ export default function DashboardPage() {
       </div>
 
       <div className="dash-two-col-grid">
-      {/* Recent Community Log */}
-      {recentLog && (
-        <button
-          className="card dash-recent dash-stat-btn animate-fade-in-up"
-          style={{
-            width: '100%',
-            animationDelay: '0.25s',
-            borderLeft: '3px solid var(--accent-purple)',
-            background: theme === 'light'
-              ? 'linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(245, 245, 250, 0.9))'
-              : 'linear-gradient(145deg, rgba(14, 14, 22, 0.9), rgba(20, 20, 30, 0.9))',
-            textAlign: 'left',
-            cursor: 'pointer'
-          }}
-          onClick={() => router.push('/circles')}
-          title="View in Circles"
-        >
-          <div>
-            <h3 style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--text-muted)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <TrendingUp size={13} style={{ color: 'var(--accent-purple)' }} /> Latest Community Log
-            </h3>
-            <div style={{ fontSize: 19, fontWeight: 700, color: 'var(--text-primary)' }}>
-              {recentLog.exerciseName} <span style={{ color: 'var(--accent-cyan)', fontWeight: 600, fontSize: 17 }}>• {recentLog.weight}kg</span>
-            </div>
-          </div>
-          <div className="dash-recent-user">
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>{recentLog.username}</div>
-              <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{recentLog.timeAgo}</div>
-            </div>
-            {recentLog.avatar_url ? (
-              <img src={recentLog.avatar_url} alt="" className="avatar" style={{ width: 42, height: 42, border: '2px solid rgba(124,58,237,0.3)' }} />
-            ) : (
-              <div className="avatar-placeholder" style={{ width: 42, height: 42, fontSize: 15, background: 'rgba(124,58,237,0.1)', color: 'var(--accent-purple)', border: '2px solid rgba(124,58,237,0.3)' }}>
-                {recentLog.username.charAt(0).toUpperCase()}
+      {/* Recent Community Logs */}
+      <div className="card animate-fade-in-up" style={{
+        animationDelay: '0.25s',
+        border: '1px solid var(--border-color)',
+        background: theme === 'light'
+          ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(245, 245, 250, 0.9))'
+          : 'linear-gradient(135deg, rgba(14, 14, 22, 0.8), rgba(20, 20, 30, 0.8))',
+        padding: 24,
+        borderRadius: 'var(--radius-lg)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+          <TrendingUp size={18} style={{ color: 'var(--accent-purple)' }} />
+          <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Community Logs</h3>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {recentLogs.map((log, idx) => (
+            <div key={idx} style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 14,
+              background: theme === 'light' ? 'rgba(0,0,0,0.015)' : 'rgba(255,255,255,0.015)',
+              border: '1px solid var(--border-color)',
+              borderRadius: 12,
+              padding: '12px 16px',
+              cursor: 'pointer'
+            }} onClick={() => router.push('/circles')}>
+              <div>
+                <h4 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 2px 0' }}>{log.exerciseName} <span style={{ color: 'var(--accent-cyan)' }}>• {log.weight}kg</span></h4>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)' }}>
+                  {log.avatar_url ? (
+                    <img src={log.avatar_url} alt="" style={{ width: 16, height: 16, borderRadius: '50%' }} />
+                  ) : (
+                    <div style={{ width: 16, height: 16, borderRadius: '50%', background: 'var(--accent-purple)', opacity: 0.2 }} />
+                  )}
+                  <span style={{ fontWeight: 600 }}>{log.username}</span>
+                  <span>•</span>
+                  <span>{log.timeAgo}</span>
+                </div>
               </div>
-            )}
-            <ArrowRight size={16} style={{ color: 'var(--accent-purple)', flexShrink: 0 }} />
-          </div>
-        </button>
-      )}
+              <ArrowRight size={14} style={{ color: 'var(--accent-purple)' }} />
+            </div>
+          ))}
+          {recentLogs.length === 0 && (
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0, textAlign: 'center', padding: '12px 0' }}>No community logs found.</p>
+          )}
+        </div>
+      </div>
 
       {/* 🏆 PR Milestone Feed */}
       <div className="card animate-fade-in-up" style={{
