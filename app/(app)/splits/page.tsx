@@ -506,12 +506,8 @@ export default function SplitsPage() {
                   <Calendar size={12} />
                   {split.frequency}
                 </div>
-                <div className="split-card-desc">{split.description}</div>
-                <div className="split-card-footer">
-                  <div className="split-card-bestfor">
-                    <Sparkles size={11} style={{ display: 'inline', marginRight: 4, verticalAlign: -1 }} />
-                    {split.best_for ? (split.best_for.length > 50 ? split.best_for.slice(0, 50) + '…' : split.best_for) : ''}
-                  </div>
+                <div className="split-card-desc" style={{ display: 'none' }}>{split.description}</div>
+                <div className="split-card-footer" style={{ marginTop: 'auto', paddingTop: 16 }}>
                   {members.length > 0 && renderBubbles(members, 4)}
                 </div>
               </div>
@@ -546,9 +542,8 @@ export default function SplitsPage() {
                         {split.frequency}
                       </div>
                     )}
-                    <div className="split-card-desc">{split.description}</div>
-                    <div className="split-card-footer">
-                      <div className="split-card-bestfor">Custom</div>
+                    <div className="split-card-desc" style={{ display: 'none' }}>{split.description}</div>
+                    <div className="split-card-footer" style={{ marginTop: 'auto', paddingTop: 16 }}>
                       {members.length > 0 && renderBubbles(members, 4)}
                     </div>
                   </div>
@@ -587,9 +582,8 @@ export default function SplitsPage() {
                         {split.frequency}
                       </div>
                     )}
-                    <div className="split-card-desc">{split.description}</div>
-                    <div className="split-card-footer">
-                      <div className="split-card-bestfor">Circle Custom</div>
+                    <div className="split-card-desc" style={{ display: 'none' }}>{split.description}</div>
+                    <div className="split-card-footer" style={{ marginTop: 'auto', paddingTop: 16 }}>
                       {members.length > 0 && renderBubbles(members, 4)}
                     </div>
                   </div>
