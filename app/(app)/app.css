@@ -633,6 +633,16 @@
   gap: 20px;
 }
 
+@media (max-width: 500px) {
+  .dash-stats {
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .dash-charts {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Equal-height stat cards + hover lift */
 .dash-stat {
   transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
@@ -668,6 +678,12 @@
   border-color: rgba(0, 245, 255, 0.3);
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.3);
   background: var(--bg-card-hover);
+}
+
+@media (max-width: 500px) {
+  .dash-stat-btn {
+    padding: 14px 16px;
+  }
 }
 
 .dash-stat-btn:active {

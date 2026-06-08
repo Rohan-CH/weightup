@@ -6,6 +6,12 @@ export const metadata: Metadata = {
   description: "Futuristic workout tracker with progress dashboards, leaderboards, and exercise tracking.",
 };
 
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
