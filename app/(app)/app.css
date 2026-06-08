@@ -637,6 +637,19 @@
   gap: 20px;
 }
 
+.dash-bento-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+  margin-bottom: 28px;
+}
+
+@media (min-width: 1024px) {
+  .dash-bento-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
 @media (max-width: 500px) {
   .dash-stats {
     grid-template-columns: 1fr 1fr;

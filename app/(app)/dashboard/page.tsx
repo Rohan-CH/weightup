@@ -851,9 +851,10 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      <div className="dash-bento-grid">
       {/* Weekly Muscle Suggestion Board */}
       <div className="card animate-fade-in-up" style={{
-        marginBottom: 28,
+        height: '100%',
         animationDelay: '0.22s',
         border: '1px solid rgba(0, 245, 255, 0.12)',
         background: theme === 'light'
@@ -988,9 +989,10 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
-      {/* ⚡ Recovery & Muscle Fatigue Status Card */}
+
+      {/* ⚡ Recovery Card */}
       <div className="card animate-fade-in-up" style={{
-        marginBottom: 28,
+        height: '100%',
         animationDelay: '0.23s',
         border: '1px solid var(--border-color)',
         background: theme === 'light'
@@ -998,14 +1000,10 @@ export default function DashboardPage() {
           : 'linear-gradient(135deg, rgba(14, 14, 22, 0.8), rgba(20, 20, 30, 0.8))',
         padding: 24,
         borderRadius: 'var(--radius-lg)',
+        display: 'flex',
+        flexDirection: 'column',
       }}>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))',
-          gap: 32
-        }}>
-          {/* Left: Rest & Recovery Ring */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', paddingRight: 8 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
             <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 20, alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 8 }}>
               <Flame size={18} style={{ color: 'var(--accent-orange)' }} />
               Recovery
@@ -1050,9 +1048,22 @@ export default function DashboardPage() {
               </p>
             </div>
           </div>
+      </div>
 
-          {/* Right: Muscle Fatigue Scores */}
-          <div>
+      {/* Muscle Fatigue Status Card */}
+      <div className="card animate-fade-in-up" style={{
+        height: '100%',
+        animationDelay: '0.24s',
+        border: '1px solid var(--border-color)',
+        background: theme === 'light'
+          ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(245, 245, 250, 0.9))'
+          : 'linear-gradient(135deg, rgba(14, 14, 22, 0.8), rgba(20, 20, 30, 0.8))',
+        padding: 24,
+        borderRadius: 'var(--radius-lg)',
+        display: 'flex',
+        flexDirection: 'column',
+      }}>
+        <div style={{ flex: 1 }}>
             <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
               <Target size={18} style={{ color: 'var(--accent-cyan)' }} />
               Fatigue
