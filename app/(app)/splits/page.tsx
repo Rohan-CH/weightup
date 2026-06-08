@@ -21,6 +21,7 @@ interface Split {
   best_for: string | null;
   advantage: string | null;
   is_default: boolean;
+  created_by: string;
 }
 
 interface SplitDay {
@@ -82,6 +83,7 @@ export default function SplitsPage() {
 
   // View state: 'loading' | 'select' | 'detail'
   const [view, setView] = useState<'loading' | 'select' | 'detail'>('loading');
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   // All available splits (defaults + user customs)
   const [splits, setSplits] = useState<Split[]>([]);
@@ -117,6 +119,7 @@ export default function SplitsPage() {
   const loadData = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
+    setCurrentUserId(user.id);
 
     // 1. Fetch all splits user can see
     const { data: splitsData } = await supabase
@@ -166,8 +169,9 @@ export default function SplitsPage() {
       .eq('split_id', splitId)
       .order('day_order');
 
+    let parsed: SplitDay[] = [];
     if (daysData) {
-      const parsed: SplitDay[] = daysData.map((d: any) => ({
+      parsed = daysData.map((d: any) => ({
         id: d.id,
         split_id: d.split_id,
         name: d.name,
@@ -182,16 +186,16 @@ export default function SplitsPage() {
       }
     }
 
-    // User exercises for each day
-    const { data: userExData } = await supabase
-      .from('user_split_day_exercises')
+    // Exercises for each day
+    const { data: exData } = await supabase
+      .from('split_day_exercises')
       .select('id, split_day_id, exercise_id, exercise_order, exercises(name)')
-      .eq('user_id', userId)
+      .in('split_day_id', parsed.map(d => d.id))
       .order('exercise_order');
 
-    if (userExData) {
+    if (exData) {
       const grouped: Record<string, SplitDayExercise[]> = {};
-      userExData.forEach((e: any) => {
+      exData.forEach((e: any) => {
         const dayId = e.split_day_id;
         if (!grouped[dayId]) grouped[dayId] = [];
         grouped[dayId].push({
@@ -303,9 +307,8 @@ export default function SplitsPage() {
     if (alreadyAdded) return;
 
     const { data, error } = await supabase
-      .from('user_split_day_exercises')
+      .from('split_day_exercises')
       .insert({
-        user_id: user.id,
         split_day_id: dayId,
         exercise_id: exercise.id,
         exercise_order: existingForDay.length,
@@ -336,7 +339,7 @@ export default function SplitsPage() {
   /* ─── Remove exercise from a day ─── */
   const removeExerciseFromDay = async (dayId: string, exerciseRowId: string) => {
     await supabase
-      .from('user_split_day_exercises')
+      .from('split_day_exercises')
       .delete()
       .eq('id', exerciseRowId);
 
@@ -464,7 +467,8 @@ export default function SplitsPage() {
   /* ─── Render: Selection Screen ─── */
   if (view === 'select') {
     const defaultSplits = splits.filter(s => s.is_default);
-    const customSplits = splits.filter(s => !s.is_default);
+    const customSplits = splits.filter(s => !s.is_default && s.created_by === currentUserId);
+    const circleSplits = splits.filter(s => !s.is_default && s.created_by !== currentUserId);
 
     return (
       <div className="animate-fade-in-up">
@@ -545,6 +549,47 @@ export default function SplitsPage() {
                     <div className="split-card-desc">{split.description}</div>
                     <div className="split-card-footer">
                       <div className="split-card-bestfor">Custom</div>
+                      {members.length > 0 && renderBubbles(members, 4)}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Circle splits */}
+        {circleSplits.length > 0 && (
+          <div style={{ marginBottom: 24 }}>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 14 }}>
+              Circle Splits
+            </h2>
+            <div className="split-grid">
+              {circleSplits.map((split, i) => {
+                const members = getMembersForSplit(split.id);
+                const isActive = activeSplit?.id === split.id;
+                // find creator info from circleSplitMembers if they are using it, otherwise we might not have their avatar.
+                // It's okay, we just show it's a circle split.
+                return (
+                  <div
+                    key={split.id}
+                    className={`split-card animate-fade-in-up ${isActive ? 'active' : ''}`}
+                    style={{
+                      animationDelay: `${(defaultSplits.length + customSplits.length + i) * 0.08}s`,
+                      '--split-accent': '#3b82f6',
+                    } as React.CSSProperties}
+                    onClick={() => selectSplit(split)}
+                  >
+                    <div className="split-card-title">{split.name}</div>
+                    {split.frequency && (
+                      <div className="split-card-freq" style={{ background: 'rgba(59,130,246,0.1)', color: '#3b82f6', border: '1px solid rgba(59,130,246,0.2)' }}>
+                        <Calendar size={12} />
+                        {split.frequency}
+                      </div>
+                    )}
+                    <div className="split-card-desc">{split.description}</div>
+                    <div className="split-card-footer">
+                      <div className="split-card-bestfor">Circle Custom</div>
                       {members.length > 0 && renderBubbles(members, 4)}
                     </div>
                   </div>
@@ -808,14 +853,16 @@ export default function SplitsPage() {
                               <Dumbbell size={14} style={{ color: accent, flexShrink: 0 }} />
                               {ex.exercise_name}
                             </div>
-                            <button
-                              className="btn-danger"
-                              style={{ padding: '4px 6px', minHeight: 0 }}
-                              onClick={() => removeExerciseFromDay(day.id, ex.id)}
-                              title="Remove exercise"
-                            >
-                              <Trash2 size={12} />
-                            </button>
+                            {(!activeSplit.is_default && activeSplit.created_by === currentUserId) && (
+                              <button
+                                className="btn-danger"
+                                style={{ padding: '4px 6px', minHeight: 0 }}
+                                onClick={() => removeExerciseFromDay(day.id, ex.id)}
+                                title="Remove exercise"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -828,75 +875,77 @@ export default function SplitsPage() {
                     )}
 
                     {/* Add exercise */}
-                    {isAddingHere ? (
-                      <div style={{ marginTop: 12, position: 'relative' }}>
-                        <div style={{ position: 'relative' }}>
-                          <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                          <input
-                            className="input"
-                            style={{ paddingLeft: 36 }}
-                            placeholder="Search exercises..."
-                            value={exerciseSearch}
-                            onChange={e => setExerciseSearch(e.target.value)}
-                            autoFocus
-                          />
-                        </div>
-                        <div style={{
-                          marginTop: 4,
-                          background: 'var(--bg-secondary)',
-                          border: '1px solid var(--border-color)',
-                          borderRadius: 'var(--radius-md)',
-                          maxHeight: 200,
-                          overflowY: 'auto',
-                        }}>
-                          {filteredExercises.map(ex => {
-                            const alreadyAdded = exercises.some(e => e.exercise_id === ex.id);
-                            return (
-                              <div
-                                key={ex.id}
-                                onClick={() => !alreadyAdded && addExerciseToDay(day.id, ex)}
-                                style={{
-                                  padding: '10px 16px',
-                                  cursor: alreadyAdded ? 'default' : 'pointer',
-                                  fontSize: 14,
-                                  borderBottom: '1px solid var(--border-color)',
-                                  opacity: alreadyAdded ? 0.4 : 1,
-                                  transition: 'background 0.15s',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'space-between',
-                                }}
-                                onMouseEnter={e => { if (!alreadyAdded) e.currentTarget.style.background = 'var(--bg-input)'; }}
-                                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-                              >
-                                <span>{ex.name}</span>
-                                {alreadyAdded && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Added</span>}
+                    {(!activeSplit.is_default && activeSplit.created_by === currentUserId) && (
+                      isAddingHere ? (
+                        <div style={{ marginTop: 12, position: 'relative' }}>
+                          <div style={{ position: 'relative' }}>
+                            <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                            <input
+                              className="input"
+                              style={{ paddingLeft: 36 }}
+                              placeholder="Search exercises..."
+                              value={exerciseSearch}
+                              onChange={e => setExerciseSearch(e.target.value)}
+                              autoFocus
+                            />
+                          </div>
+                          <div style={{
+                            marginTop: 4,
+                            background: 'var(--bg-secondary)',
+                            border: '1px solid var(--border-color)',
+                            borderRadius: 'var(--radius-md)',
+                            maxHeight: 200,
+                            overflowY: 'auto',
+                          }}>
+                            {filteredExercises.map(ex => {
+                              const alreadyAdded = exercises.some(e => e.exercise_id === ex.id);
+                              return (
+                                <div
+                                  key={ex.id}
+                                  onClick={() => !alreadyAdded && addExerciseToDay(day.id, ex)}
+                                  style={{
+                                    padding: '10px 16px',
+                                    cursor: alreadyAdded ? 'default' : 'pointer',
+                                    fontSize: 14,
+                                    borderBottom: '1px solid var(--border-color)',
+                                    opacity: alreadyAdded ? 0.4 : 1,
+                                    transition: 'background 0.15s',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                  }}
+                                  onMouseEnter={e => { if (!alreadyAdded) e.currentTarget.style.background = 'var(--bg-input)'; }}
+                                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                                >
+                                  <span>{ex.name}</span>
+                                  {alreadyAdded && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Added</span>}
+                                </div>
+                              );
+                            })}
+                            {filteredExercises.length === 0 && (
+                              <div style={{ padding: '12px 16px', color: 'var(--text-muted)', fontSize: 14 }}>
+                                No exercises found
                               </div>
-                            );
-                          })}
-                          {filteredExercises.length === 0 && (
-                            <div style={{ padding: '12px 16px', color: 'var(--text-muted)', fontSize: 14 }}>
-                              No exercises found
-                            </div>
-                          )}
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            style={{ marginTop: 8, width: '100%', fontSize: 13 }}
+                            onClick={() => { setAddingToDayId(null); setExerciseSearch(''); }}
+                          >
+                            Cancel
+                          </button>
                         </div>
+                      ) : (
                         <button
-                          type="button"
-                          className="btn-secondary"
-                          style={{ marginTop: 8, width: '100%', fontSize: 13 }}
-                          onClick={() => { setAddingToDayId(null); setExerciseSearch(''); }}
+                          className="split-day-add-btn"
+                          onClick={() => { setAddingToDayId(day.id); setExerciseSearch(''); }}
                         >
-                          Cancel
+                          <Plus size={15} />
+                          Add Exercise
                         </button>
-                      </div>
-                    ) : (
-                      <button
-                        className="split-day-add-btn"
-                        onClick={() => { setAddingToDayId(day.id); setExerciseSearch(''); }}
-                      >
-                        <Plus size={15} />
-                        Add Exercise
-                      </button>
+                      )
                     )}
 
                     {/* Quick log */}

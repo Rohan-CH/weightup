@@ -49,15 +49,14 @@ CREATE TABLE IF NOT EXISTS user_splits (
   UNIQUE (user_id, split_id)
 );
 
--- Exercises a user assigns to a specific split day
-CREATE TABLE IF NOT EXISTS user_split_day_exercises (
+-- Exercises assigned to a specific split day (templates for defaults, or custom for users)
+CREATE TABLE IF NOT EXISTS split_day_exercises (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   split_day_id UUID NOT NULL REFERENCES split_days(id) ON DELETE CASCADE,
   exercise_id UUID NOT NULL REFERENCES exercises(id) ON DELETE CASCADE,
   exercise_order INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ DEFAULT now(),
-  UNIQUE (user_id, split_day_id, exercise_id)
+  UNIQUE (split_day_id, exercise_id)
 );
 
 -- Indexes
@@ -65,19 +64,19 @@ CREATE INDEX IF NOT EXISTS idx_split_days_split ON split_days(split_id);
 CREATE INDEX IF NOT EXISTS idx_split_day_muscles_day ON split_day_muscles(split_day_id);
 CREATE INDEX IF NOT EXISTS idx_user_splits_user ON user_splits(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_splits_split ON user_splits(split_id);
-CREATE INDEX IF NOT EXISTS idx_user_split_day_exercises_user ON user_split_day_exercises(user_id);
-CREATE INDEX IF NOT EXISTS idx_user_split_day_exercises_day ON user_split_day_exercises(split_day_id);
+CREATE INDEX IF NOT EXISTS idx_split_day_exercises_day ON split_day_exercises(split_day_id);
 
 -- ===================== RLS =====================
 
 -- splits
 ALTER TABLE splits ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "View default splits or own custom splits" ON splits;
-CREATE POLICY "View default splits or own custom splits"
+DROP POLICY IF EXISTS "View default splits or own custom splits or circle splits" ON splits;
+CREATE POLICY "View default splits or own custom splits or circle splits"
   ON splits FOR SELECT USING (
     is_default = true
     OR created_by = auth.uid()
+    OR public.shares_circle(auth.uid(), created_by)
   );
 
 DROP POLICY IF EXISTS "Users can create custom splits" ON splits;
@@ -109,7 +108,7 @@ CREATE POLICY "View days of visible splits"
     EXISTS (
       SELECT 1 FROM splits s
       WHERE s.id = split_id
-        AND (s.is_default = true OR s.created_by = auth.uid())
+        AND (s.is_default = true OR s.created_by = auth.uid() OR public.shares_circle(auth.uid(), s.created_by))
     )
   );
 
@@ -156,7 +155,7 @@ CREATE POLICY "View muscles of visible split days"
       SELECT 1 FROM split_days sd
       JOIN splits s ON s.id = sd.split_id
       WHERE sd.id = split_day_id
-        AND (s.is_default = true OR s.created_by = auth.uid())
+        AND (s.is_default = true OR s.created_by = auth.uid() OR public.shares_circle(auth.uid(), s.created_by))
     )
   );
 
@@ -210,24 +209,55 @@ DROP POLICY IF EXISTS "Users can remove their split" ON user_splits;
 CREATE POLICY "Users can remove their split"
   ON user_splits FOR DELETE USING (user_id = auth.uid());
 
--- user_split_day_exercises
-ALTER TABLE user_split_day_exercises ENABLE ROW LEVEL SECURITY;
+-- split_day_exercises
+ALTER TABLE split_day_exercises ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "View own split day exercises" ON user_split_day_exercises;
-CREATE POLICY "View own split day exercises"
-  ON user_split_day_exercises FOR SELECT USING (user_id = auth.uid());
+DROP POLICY IF EXISTS "View exercises of visible split days" ON split_day_exercises;
+CREATE POLICY "View exercises of visible split days"
+  ON split_day_exercises FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM split_days sd
+      JOIN splits s ON s.id = sd.split_id
+      WHERE sd.id = split_day_id
+        AND (s.is_default = true OR s.created_by = auth.uid() OR public.shares_circle(auth.uid(), s.created_by))
+    )
+  );
 
-DROP POLICY IF EXISTS "Users can add exercises to split days" ON user_split_day_exercises;
-CREATE POLICY "Users can add exercises to split days"
-  ON user_split_day_exercises FOR INSERT WITH CHECK (user_id = auth.uid());
+DROP POLICY IF EXISTS "Manage exercises of own custom split days" ON split_day_exercises;
+CREATE POLICY "Manage exercises of own custom split days"
+  ON split_day_exercises FOR INSERT WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM split_days sd
+      JOIN splits s ON s.id = sd.split_id
+      WHERE sd.id = split_day_id
+        AND s.is_default = false
+        AND s.created_by = auth.uid()
+    )
+  );
 
-DROP POLICY IF EXISTS "Users can update their split day exercises" ON user_split_day_exercises;
-CREATE POLICY "Users can update their split day exercises"
-  ON user_split_day_exercises FOR UPDATE USING (user_id = auth.uid());
+DROP POLICY IF EXISTS "Update exercises of own custom split days" ON split_day_exercises;
+CREATE POLICY "Update exercises of own custom split days"
+  ON split_day_exercises FOR UPDATE USING (
+    EXISTS (
+      SELECT 1 FROM split_days sd
+      JOIN splits s ON s.id = sd.split_id
+      WHERE sd.id = split_day_id
+        AND s.is_default = false
+        AND s.created_by = auth.uid()
+    )
+  );
 
-DROP POLICY IF EXISTS "Users can remove exercises from split days" ON user_split_day_exercises;
-CREATE POLICY "Users can remove exercises from split days"
-  ON user_split_day_exercises FOR DELETE USING (user_id = auth.uid());
+DROP POLICY IF EXISTS "Delete exercises of own custom split days" ON split_day_exercises;
+CREATE POLICY "Delete exercises of own custom split days"
+  ON split_day_exercises FOR DELETE USING (
+    EXISTS (
+      SELECT 1 FROM split_days sd
+      JOIN splits s ON s.id = sd.split_id
+      WHERE sd.id = split_day_id
+        AND s.is_default = false
+        AND s.created_by = auth.uid()
+    )
+  );
 
 -- ===================== SEED: DEFAULT SPLITS =====================
 
@@ -407,3 +437,127 @@ INSERT INTO split_day_muscles (split_day_id, muscle_key) VALUES
   ('a4000001-0001-0001-0001-000000000005', 'triceps'),
   ('a4000001-0001-0001-0001-000000000005', 'forearms')
 ON CONFLICT (split_day_id, muscle_key) DO NOTHING;
+
+-- ===================== SEED: DEFAULT SPLIT EXERCISES =====================
+-- We use subqueries to get the UUID of the exercises seeded in schema.sql
+
+-- 1. Full Body Split
+INSERT INTO split_day_exercises (split_day_id, exercise_id, exercise_order)
+SELECT 'a1000001-0001-0001-0001-000000000001'::uuid, id, 1 FROM exercises WHERE name = 'Squat' UNION ALL
+SELECT 'a1000001-0001-0001-0001-000000000001'::uuid, id, 2 FROM exercises WHERE name = 'Flat Barbell Bench Press' UNION ALL
+SELECT 'a1000001-0001-0001-0001-000000000001'::uuid, id, 3 FROM exercises WHERE name = 'Barbell Row' UNION ALL
+SELECT 'a1000001-0001-0001-0001-000000000001'::uuid, id, 4 FROM exercises WHERE name = 'Overhead Press' UNION ALL
+SELECT 'a1000001-0001-0001-0001-000000000001'::uuid, id, 5 FROM exercises WHERE name = 'Dumbbell Curl'
+ON CONFLICT (split_day_id, exercise_id) DO NOTHING;
+
+INSERT INTO split_day_exercises (split_day_id, exercise_id, exercise_order)
+SELECT 'a1000001-0001-0001-0001-000000000002'::uuid, id, 1 FROM exercises WHERE name = 'Deadlift' UNION ALL
+SELECT 'a1000001-0001-0001-0001-000000000002'::uuid, id, 2 FROM exercises WHERE name = 'Incline Dumbbell Press' UNION ALL
+SELECT 'a1000001-0001-0001-0001-000000000002'::uuid, id, 3 FROM exercises WHERE name = 'Pull Up' UNION ALL
+SELECT 'a1000001-0001-0001-0001-000000000002'::uuid, id, 4 FROM exercises WHERE name = 'Lateral Raise' UNION ALL
+SELECT 'a1000001-0001-0001-0001-000000000002'::uuid, id, 5 FROM exercises WHERE name = 'Tricep Pushdown'
+ON CONFLICT (split_day_id, exercise_id) DO NOTHING;
+
+INSERT INTO split_day_exercises (split_day_id, exercise_id, exercise_order)
+SELECT 'a1000001-0001-0001-0001-000000000003'::uuid, id, 1 FROM exercises WHERE name = 'Leg Press' UNION ALL
+SELECT 'a1000001-0001-0001-0001-000000000003'::uuid, id, 2 FROM exercises WHERE name = 'Cable Fly' UNION ALL
+SELECT 'a1000001-0001-0001-0001-000000000003'::uuid, id, 3 FROM exercises WHERE name = 'Seated Cable Row' UNION ALL
+SELECT 'a1000001-0001-0001-0001-000000000003'::uuid, id, 4 FROM exercises WHERE name = 'Dumbbell Shoulder Press' UNION ALL
+SELECT 'a1000001-0001-0001-0001-000000000003'::uuid, id, 5 FROM exercises WHERE name = 'Hammer Curl'
+ON CONFLICT (split_day_id, exercise_id) DO NOTHING;
+
+-- 2. Upper/Lower
+INSERT INTO split_day_exercises (split_day_id, exercise_id, exercise_order)
+SELECT 'a2000001-0001-0001-0001-000000000001'::uuid, id, 1 FROM exercises WHERE name = 'Flat Barbell Bench Press' UNION ALL
+SELECT 'a2000001-0001-0001-0001-000000000001'::uuid, id, 2 FROM exercises WHERE name = 'Barbell Row' UNION ALL
+SELECT 'a2000001-0001-0001-0001-000000000001'::uuid, id, 3 FROM exercises WHERE name = 'Overhead Press' UNION ALL
+SELECT 'a2000001-0001-0001-0001-000000000001'::uuid, id, 4 FROM exercises WHERE name = 'Lat Pulldown' UNION ALL
+SELECT 'a2000001-0001-0001-0001-000000000001'::uuid, id, 5 FROM exercises WHERE name = 'Tricep Pushdown' UNION ALL
+SELECT 'a2000001-0001-0001-0001-000000000001'::uuid, id, 6 FROM exercises WHERE name = 'Dumbbell Curl'
+ON CONFLICT (split_day_id, exercise_id) DO NOTHING;
+
+INSERT INTO split_day_exercises (split_day_id, exercise_id, exercise_order)
+SELECT 'a2000001-0001-0001-0001-000000000002'::uuid, id, 1 FROM exercises WHERE name = 'Squat' UNION ALL
+SELECT 'a2000001-0001-0001-0001-000000000002'::uuid, id, 2 FROM exercises WHERE name = 'Romanian Deadlift' UNION ALL
+SELECT 'a2000001-0001-0001-0001-000000000002'::uuid, id, 3 FROM exercises WHERE name = 'Leg Press' UNION ALL
+SELECT 'a2000001-0001-0001-0001-000000000002'::uuid, id, 4 FROM exercises WHERE name = 'Leg Curl' UNION ALL
+SELECT 'a2000001-0001-0001-0001-000000000002'::uuid, id, 5 FROM exercises WHERE name = 'Calf Raise'
+ON CONFLICT (split_day_id, exercise_id) DO NOTHING;
+
+INSERT INTO split_day_exercises (split_day_id, exercise_id, exercise_order)
+SELECT 'a2000001-0001-0001-0001-000000000003'::uuid, id, 1 FROM exercises WHERE name = 'Incline Dumbbell Press' UNION ALL
+SELECT 'a2000001-0001-0001-0001-000000000003'::uuid, id, 2 FROM exercises WHERE name = 'Pull Up' UNION ALL
+SELECT 'a2000001-0001-0001-0001-000000000003'::uuid, id, 3 FROM exercises WHERE name = 'Dumbbell Shoulder Press' UNION ALL
+SELECT 'a2000001-0001-0001-0001-000000000003'::uuid, id, 4 FROM exercises WHERE name = 'Seated Cable Row' UNION ALL
+SELECT 'a2000001-0001-0001-0001-000000000003'::uuid, id, 5 FROM exercises WHERE name = 'Skull Crusher' UNION ALL
+SELECT 'a2000001-0001-0001-0001-000000000003'::uuid, id, 6 FROM exercises WHERE name = 'Hammer Curl'
+ON CONFLICT (split_day_id, exercise_id) DO NOTHING;
+
+INSERT INTO split_day_exercises (split_day_id, exercise_id, exercise_order)
+SELECT 'a2000001-0001-0001-0001-000000000004'::uuid, id, 1 FROM exercises WHERE name = 'Deadlift' UNION ALL
+SELECT 'a2000001-0001-0001-0001-000000000004'::uuid, id, 2 FROM exercises WHERE name = 'Leg Press' UNION ALL
+SELECT 'a2000001-0001-0001-0001-000000000004'::uuid, id, 3 FROM exercises WHERE name = 'Hip Thrust' UNION ALL
+SELECT 'a2000001-0001-0001-0001-000000000004'::uuid, id, 4 FROM exercises WHERE name = 'Leg Extension' UNION ALL
+SELECT 'a2000001-0001-0001-0001-000000000004'::uuid, id, 5 FROM exercises WHERE name = 'Calf Raise'
+ON CONFLICT (split_day_id, exercise_id) DO NOTHING;
+
+-- 3. PPL
+INSERT INTO split_day_exercises (split_day_id, exercise_id, exercise_order)
+SELECT 'a3000001-0001-0001-0001-000000000001'::uuid, id, 1 FROM exercises WHERE name = 'Flat Barbell Bench Press' UNION ALL
+SELECT 'a3000001-0001-0001-0001-000000000001'::uuid, id, 2 FROM exercises WHERE name = 'Overhead Press' UNION ALL
+SELECT 'a3000001-0001-0001-0001-000000000001'::uuid, id, 3 FROM exercises WHERE name = 'Incline Dumbbell Press' UNION ALL
+SELECT 'a3000001-0001-0001-0001-000000000001'::uuid, id, 4 FROM exercises WHERE name = 'Lateral Raise' UNION ALL
+SELECT 'a3000001-0001-0001-0001-000000000001'::uuid, id, 5 FROM exercises WHERE name = 'Tricep Pushdown'
+ON CONFLICT (split_day_id, exercise_id) DO NOTHING;
+
+INSERT INTO split_day_exercises (split_day_id, exercise_id, exercise_order)
+SELECT 'a3000001-0001-0001-0001-000000000002'::uuid, id, 1 FROM exercises WHERE name = 'Barbell Row' UNION ALL
+SELECT 'a3000001-0001-0001-0001-000000000002'::uuid, id, 2 FROM exercises WHERE name = 'Pull Up' UNION ALL
+SELECT 'a3000001-0001-0001-0001-000000000002'::uuid, id, 3 FROM exercises WHERE name = 'Face Pull' UNION ALL
+SELECT 'a3000001-0001-0001-0001-000000000002'::uuid, id, 4 FROM exercises WHERE name = 'Dumbbell Curl' UNION ALL
+SELECT 'a3000001-0001-0001-0001-000000000002'::uuid, id, 5 FROM exercises WHERE name = 'Hammer Curl'
+ON CONFLICT (split_day_id, exercise_id) DO NOTHING;
+
+INSERT INTO split_day_exercises (split_day_id, exercise_id, exercise_order)
+SELECT 'a3000001-0001-0001-0001-000000000003'::uuid, id, 1 FROM exercises WHERE name = 'Squat' UNION ALL
+SELECT 'a3000001-0001-0001-0001-000000000003'::uuid, id, 2 FROM exercises WHERE name = 'Romanian Deadlift' UNION ALL
+SELECT 'a3000001-0001-0001-0001-000000000003'::uuid, id, 3 FROM exercises WHERE name = 'Leg Press' UNION ALL
+SELECT 'a3000001-0001-0001-0001-000000000003'::uuid, id, 4 FROM exercises WHERE name = 'Leg Curl' UNION ALL
+SELECT 'a3000001-0001-0001-0001-000000000003'::uuid, id, 5 FROM exercises WHERE name = 'Calf Raise'
+ON CONFLICT (split_day_id, exercise_id) DO NOTHING;
+
+-- 4. Bro Split
+INSERT INTO split_day_exercises (split_day_id, exercise_id, exercise_order)
+SELECT 'a4000001-0001-0001-0001-000000000001'::uuid, id, 1 FROM exercises WHERE name = 'Flat Barbell Bench Press' UNION ALL
+SELECT 'a4000001-0001-0001-0001-000000000001'::uuid, id, 2 FROM exercises WHERE name = 'Incline Dumbbell Press' UNION ALL
+SELECT 'a4000001-0001-0001-0001-000000000001'::uuid, id, 3 FROM exercises WHERE name = 'Cable Fly' UNION ALL
+SELECT 'a4000001-0001-0001-0001-000000000001'::uuid, id, 4 FROM exercises WHERE name = 'Dumbbell Fly'
+ON CONFLICT (split_day_id, exercise_id) DO NOTHING;
+
+INSERT INTO split_day_exercises (split_day_id, exercise_id, exercise_order)
+SELECT 'a4000001-0001-0001-0001-000000000002'::uuid, id, 1 FROM exercises WHERE name = 'Deadlift' UNION ALL
+SELECT 'a4000001-0001-0001-0001-000000000002'::uuid, id, 2 FROM exercises WHERE name = 'Barbell Row' UNION ALL
+SELECT 'a4000001-0001-0001-0001-000000000002'::uuid, id, 3 FROM exercises WHERE name = 'Lat Pulldown' UNION ALL
+SELECT 'a4000001-0001-0001-0001-000000000002'::uuid, id, 4 FROM exercises WHERE name = 'Seated Cable Row'
+ON CONFLICT (split_day_id, exercise_id) DO NOTHING;
+
+INSERT INTO split_day_exercises (split_day_id, exercise_id, exercise_order)
+SELECT 'a4000001-0001-0001-0001-000000000003'::uuid, id, 1 FROM exercises WHERE name = 'Squat' UNION ALL
+SELECT 'a4000001-0001-0001-0001-000000000003'::uuid, id, 2 FROM exercises WHERE name = 'Leg Press' UNION ALL
+SELECT 'a4000001-0001-0001-0001-000000000003'::uuid, id, 3 FROM exercises WHERE name = 'Leg Extension' UNION ALL
+SELECT 'a4000001-0001-0001-0001-000000000003'::uuid, id, 4 FROM exercises WHERE name = 'Leg Curl'
+ON CONFLICT (split_day_id, exercise_id) DO NOTHING;
+
+INSERT INTO split_day_exercises (split_day_id, exercise_id, exercise_order)
+SELECT 'a4000001-0001-0001-0001-000000000004'::uuid, id, 1 FROM exercises WHERE name = 'Overhead Press' UNION ALL
+SELECT 'a4000001-0001-0001-0001-000000000004'::uuid, id, 2 FROM exercises WHERE name = 'Dumbbell Shoulder Press' UNION ALL
+SELECT 'a4000001-0001-0001-0001-000000000004'::uuid, id, 3 FROM exercises WHERE name = 'Lateral Raise' UNION ALL
+SELECT 'a4000001-0001-0001-0001-000000000004'::uuid, id, 4 FROM exercises WHERE name = 'Face Pull'
+ON CONFLICT (split_day_id, exercise_id) DO NOTHING;
+
+INSERT INTO split_day_exercises (split_day_id, exercise_id, exercise_order)
+SELECT 'a4000001-0001-0001-0001-000000000005'::uuid, id, 1 FROM exercises WHERE name = 'Dumbbell Curl' UNION ALL
+SELECT 'a4000001-0001-0001-0001-000000000005'::uuid, id, 2 FROM exercises WHERE name = 'Tricep Pushdown' UNION ALL
+SELECT 'a4000001-0001-0001-0001-000000000005'::uuid, id, 3 FROM exercises WHERE name = 'Hammer Curl' UNION ALL
+SELECT 'a4000001-0001-0001-0001-000000000005'::uuid, id, 4 FROM exercises WHERE name = 'Skull Crusher'
+ON CONFLICT (split_day_id, exercise_id) DO NOTHING;
