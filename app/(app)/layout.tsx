@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import ThemeToggle from './ThemeToggle';
+import WeightPromptModal from './WeightPromptModal';
 import './app.css';
 
 const navLinks = [
@@ -142,6 +143,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <main className="main-content">
         {children}
       </main>
+
+      <WeightPromptModal />
     </div>
   );
 }

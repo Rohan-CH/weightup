@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   username TEXT UNIQUE NOT NULL,
   avatar_url TEXT,
+  height_cm NUMERIC(5,2),
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -102,6 +103,31 @@ CREATE INDEX IF NOT EXISTS idx_workout_logs_user_id ON workout_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_workout_logs_exercise_id ON workout_logs(exercise_id);
 CREATE INDEX IF NOT EXISTS idx_workout_logs_logged_at ON workout_logs(logged_at);
 CREATE INDEX IF NOT EXISTS idx_workout_logs_user_exercise ON workout_logs(user_id, exercise_id);
+
+-- ===================== BODY METRICS =====================
+CREATE TABLE IF NOT EXISTS body_metrics (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  weight_kg NUMERIC(5,2) NOT NULL CHECK (weight_kg > 0),
+  logged_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE body_metrics ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can view their own body metrics" ON body_metrics;
+CREATE POLICY "Users can view their own body metrics"
+  ON body_metrics FOR SELECT USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can insert their own body metrics" ON body_metrics;
+CREATE POLICY "Users can insert their own body metrics"
+  ON body_metrics FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can delete their own body metrics" ON body_metrics;
+CREATE POLICY "Users can delete their own body metrics"
+  ON body_metrics FOR DELETE USING (auth.uid() = user_id);
+
+CREATE INDEX IF NOT EXISTS idx_body_metrics_user_id ON body_metrics(user_id);
+CREATE INDEX IF NOT EXISTS idx_body_metrics_logged_at ON body_metrics(logged_at);
 
 -- ===================== SEED EXERCISES =====================
 INSERT INTO exercises (name, is_custom) VALUES
