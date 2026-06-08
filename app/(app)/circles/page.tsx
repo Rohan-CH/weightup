@@ -917,76 +917,55 @@ function CirclesPageInner() {
                       key={log.id}
                       id={`feedlog-${log.id}`}
                       className="card"
-                      style={highlighted ? { boxShadow: '0 0 0 2px var(--accent-cyan)', transition: 'box-shadow 0.3s' } : undefined}
+                      style={{
+                        padding: '16px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 12,
+                        ...(highlighted ? { boxShadow: '0 0 0 2px var(--accent-cyan)', transition: 'box-shadow 0.3s' } : {})
+                      }}
                     >
-                      {/* header */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-                        {log.avatar_url ? (
-                          <img src={log.avatar_url} alt="" className="avatar" style={{ width: 36, height: 36 }} />
-                        ) : (
-                          <div className="avatar-placeholder" style={{ width: 36, height: 36, fontSize: 14 }}>
-                            {log.username.charAt(0).toUpperCase()}
-                          </div>
-                        )}
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 600 }}>{log.username}</div>
-                          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                            {new Date(log.logged_at + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      {/* Top row: Avatar, Name, Date -- Exercise, Weight, Reps */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                          {log.avatar_url ? (
+                            <img src={log.avatar_url} alt="" className="avatar" style={{ width: 32, height: 32 }} />
+                          ) : (
+                            <div className="avatar-placeholder" style={{ width: 32, height: 32, fontSize: 13 }}>
+                              {log.username.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                          <div>
+                            <div style={{ fontWeight: 600, fontSize: 14 }}>{log.username}</div>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                              {new Date(log.logged_at + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                            </div>
                           </div>
                         </div>
                         <div style={{ textAlign: 'right' }}>
-                          <div style={{ fontWeight: 700 }}>{log.exercise_name}</div>
-                          <div style={{ fontSize: 13 }}>
-                            <span className="badge badge-cyan">{log.weight_kg} kg</span>{' '}
-                            <span className="badge badge-purple">{log.reps} reps</span>
+                          <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--accent-cyan)' }}>{log.exercise_name}</div>
+                          <div style={{ fontSize: 12, marginTop: 2, display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                            <span style={{ color: 'var(--text-secondary)' }}>{log.weight_kg}kg</span>
+                            <span style={{ color: 'var(--text-secondary)' }}>×</span>
+                            <span style={{ color: 'var(--text-secondary)' }}>{log.reps}</span>
                           </div>
                         </div>
                       </div>
 
-                      {/* reactions */}
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
-                        {REACTION_EMOJIS.map((emoji) => {
-                          const count = logReactions.filter((r) => r.emoji === emoji).length;
-                          const mine = logReactions.some((r) => r.emoji === emoji && r.user_id === userId);
-                          return (
-                            <button
-                              key={emoji}
-                              onClick={() => toggleReaction(log.id, emoji)}
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 4,
-                                padding: '4px 10px',
-                                borderRadius: 'var(--radius-full)',
-                                fontSize: 14,
-                                cursor: 'pointer',
-                                background: mine ? 'rgba(0,245,255,0.12)' : 'rgba(255,255,255,0.05)',
-                                border: `1px solid ${mine ? 'var(--accent-cyan)' : 'rgba(255,255,255,0.1)'}`,
-                                color: 'var(--text-primary)',
-                                transition: 'all 0.15s',
-                              }}
-                            >
-                              <span>{emoji}</span>
-                              {count > 0 && <span style={{ fontSize: 12, fontWeight: 600 }}>{count}</span>}
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      {/* comments */}
+                      {/* Comments List (only if they exist) */}
                       {logComments.length > 0 && (
-                        <div style={{ display: 'grid', gap: 6, marginBottom: 10 }}>
+                        <div style={{ display: 'grid', gap: 4, background: 'var(--bg-primary)', padding: '10px 12px', borderRadius: 8 }}>
                           {logComments.map((c) => (
-                            <div key={c.id} style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 14 }}>
-                              <span style={{ fontWeight: 600, color: 'var(--accent-cyan)' }}>{c.username}</span>
-                              <span style={{ flex: 1 }}>{c.body}</span>
+                            <div key={c.id} style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 13 }}>
+                              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{c.username}</span>
+                              <span style={{ flex: 1, color: 'var(--text-secondary)' }}>{c.body}</span>
                               {c.user_id === userId && (
                                 <button
                                   onClick={() => deleteComment(c.id)}
                                   style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 0 }}
                                   aria-label="Delete comment"
                                 >
-                                  <X size={13} />
+                                  <X size={12} />
                                 </button>
                               )}
                             </div>
@@ -994,18 +973,88 @@ function CirclesPageInner() {
                         </div>
                       )}
 
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <input
-                          className="input"
-                          maxLength={200}
-                          placeholder="Add a comment..."
-                          value={commentDrafts[log.id] || ''}
-                          onChange={(e) => setCommentDrafts((prev) => ({ ...prev, [log.id]: e.target.value }))}
-                          onKeyDown={(e) => e.key === 'Enter' && addComment(log.id)}
-                        />
-                        <button className="btn-primary" style={{ padding: '0 14px' }} onClick={() => addComment(log.id)}>
-                          <Send size={16} />
-                        </button>
+                      {/* Bottom action bar: Reactions and Comment input */}
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', borderTop: '1px solid var(--border-color)', paddingTop: 12, marginTop: 4 }}>
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                          {REACTION_EMOJIS.map((emoji) => {
+                            const count = logReactions.filter((r) => r.emoji === emoji).length;
+                            const mine = logReactions.some((r) => r.emoji === emoji && r.user_id === userId);
+                            return (
+                              <button
+                                key={emoji}
+                                onClick={() => toggleReaction(log.id, emoji)}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  padding: '4px 8px',
+                                  borderRadius: 16,
+                                  fontSize: 13,
+                                  cursor: 'pointer',
+                                  background: mine ? 'rgba(0,245,255,0.1)' : 'transparent',
+                                  border: mine ? '1px solid var(--accent-cyan)' : '1px solid transparent',
+                                  transition: 'all 0.2s ease',
+                                  opacity: mine || count > 0 ? 1 : 0.6,
+                                }}
+                                className="reaction-btn-hover"
+                                onMouseEnter={(e) => {
+                                  if (!mine && count === 0) {
+                                    e.currentTarget.style.opacity = '1';
+                                    e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+                                  }
+                                }}
+                                onMouseLeave={(e) => {
+                                  if (!mine && count === 0) {
+                                    e.currentTarget.style.opacity = '0.6';
+                                    e.currentTarget.style.background = 'transparent';
+                                  }
+                                }}
+                              >
+                                <span>{emoji}</span>
+                                {count > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: mine ? 'var(--accent-cyan)' : 'inherit' }}>{count}</span>}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        
+                        <div style={{ flex: 1, minWidth: 200, position: 'relative' }}>
+                          <input
+                            style={{
+                              width: '100%',
+                              background: 'var(--bg-primary)',
+                              border: 'none',
+                              borderRadius: 16,
+                              padding: '6px 32px 6px 12px',
+                              fontSize: 13,
+                              color: 'var(--text-primary)',
+                              outline: 'none'
+                            }}
+                            maxLength={200}
+                            placeholder="Add a comment..."
+                            value={commentDrafts[log.id] || ''}
+                            onChange={(e) => setCommentDrafts((prev) => ({ ...prev, [log.id]: e.target.value }))}
+                            onKeyDown={(e) => e.key === 'Enter' && addComment(log.id)}
+                          />
+                          <button 
+                            style={{ 
+                              position: 'absolute', 
+                              right: 6, 
+                              top: '50%', 
+                              transform: 'translateY(-50%)',
+                              background: 'transparent',
+                              border: 'none',
+                              color: 'var(--accent-cyan)',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }} 
+                            onClick={() => addComment(log.id)}
+                            disabled={!commentDrafts[log.id]}
+                          >
+                            <Send size={14} style={{ opacity: commentDrafts[log.id] ? 1 : 0.3 }} />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );
