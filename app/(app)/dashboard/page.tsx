@@ -863,131 +863,54 @@ export default function DashboardPage() {
         padding: 24,
         borderRadius: 'var(--radius-lg)',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
-          <div>
-            <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
+            <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 20, alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 8 }}>
               <Target size={18} style={{ color: 'var(--accent-cyan)' }} />
-              Muscle Targets
+              Coverage
             </h3>
-          </div>
-          <div style={{
-            fontSize: 13,
-            fontWeight: 600,
-            background: 'rgba(0, 245, 255, 0.08)',
-            color: 'var(--accent-cyan)',
-            padding: '4px 10px',
-            borderRadius: 12,
-            border: '1px solid rgba(0, 245, 255, 0.15)',
-          }}>
-            {hitCount} / 16 Hit
-          </div>
-        </div>
-
-        {/* Progress Bar */}
-        <div style={{
-          width: '100%',
-          height: 6,
-          background: 'rgba(255, 255, 255, 0.05)',
-          borderRadius: 3,
-          overflow: 'hidden',
-          marginBottom: 20
-        }}>
-          <div style={{
-            width: `${(hitCount / 16) * 100}%`,
-            height: '100%',
-            background: 'linear-gradient(90deg, var(--accent-purple), var(--accent-cyan))',
-            borderRadius: 3,
-            transition: 'width 0.5s ease-out',
-            boxShadow: '0 0 8px var(--accent-cyan)'
-          }} />
-        </div>
-
-        {leftMuscles.length === 0 ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(16, 185, 129, 0.06)', border: '1px solid rgba(16, 185, 129, 0.15)', borderRadius: 12, padding: 16 }}>
-            <span style={{ fontSize: 20 }}>🎉</span>
-            <div style={{ fontSize: 14, color: 'var(--accent-green)', fontWeight: 500 }}>
-              All muscles hit this week!
-            </div>
-          </div>
-        ) : (
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 10 }}>
-              Muscles left to hit:
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16, alignItems: 'center' }}>
-              {(showAllLeftMuscles ? leftMuscles : leftMuscles.slice(0, 4)).map(m => {
-                const meta = MUSCLE_META[m];
-                return (
-                  <div
-                    key={m}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      background: 'rgba(255, 255, 255, 0.02)',
-                      border: `1px solid rgba(255, 255, 255, 0.08)`,
-                      borderRadius: 20,
-                      padding: '6px 12px',
-                      fontSize: 12,
-                      color: 'var(--text-primary)',
-                      transition: 'border-color 0.15s, background 0.15s',
-                    }}
-                  >
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: meta.color, display: 'inline-block', boxShadow: `0 0 5px ${meta.color}` }} />
-                    {meta.label}
-                  </div>
-                );
-              })}
-              {leftMuscles.length > 4 && (
-                <button
-                  onClick={() => setShowAllLeftMuscles(!showAllLeftMuscles)}
-                  style={{
-                    background: 'rgba(0, 245, 255, 0.08)',
-                    border: '1px solid rgba(0, 245, 255, 0.2)',
-                    color: 'var(--accent-cyan)',
-                    fontSize: 11,
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    padding: '6px 14px',
-                    borderRadius: 20,
-                    transition: 'all 0.15s ease',
-                  }}
-                  className="show-more-btn"
-                >
-                  {showAllLeftMuscles ? 'Show Less' : `+ ${leftMuscles.length - 4} more`}
-                </button>
-              )}
-            </div>
-            <div style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: 8,
-              background: 'rgba(124, 58, 237, 0.06)',
-              border: '1px solid rgba(124, 58, 237, 0.15)',
-              borderRadius: 12,
-              padding: 14,
-              fontSize: 13,
-              color: 'var(--text-secondary)',
-              lineHeight: 1.4
-            }}>
-              <span style={{ fontSize: 16, marginTop: -1 }}>💡</span>
-              <div>
-                <strong>Suggestion:</strong> Add{' '}
-                <span style={{ color: 'var(--accent-cyan)', fontWeight: 500 }}>
-                  {leftMuscles.includes('chest') ? 'Bench Press or Cable Flyes' :
-                   leftMuscles.includes('biceps') ? 'Dumbbell Curls or Preacher Curls' :
-                   leftMuscles.includes('quads') ? 'Squats or Leg Presses' :
-                   leftMuscles.includes('lats') ? 'Pull Ups or Lat Pulldowns' :
-                   leftMuscles.includes('hamstrings') ? 'Romanian Deadlifts or Leg Curls' :
-                   leftMuscles.includes('triceps') ? 'Tricep Pushdowns or Skull Crushers' :
-                   leftMuscles.includes('glutes') ? 'Hip Thrusts or Squats' :
-                   leftMuscles.includes('front_delts') || leftMuscles.includes('side_delts') || leftMuscles.includes('rear_delts') ? 'Overhead Press or Lateral Raises' :
-                   'focused movements'}
+            
+            <div style={{ position: 'relative', width: 120, height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg width="120" height="120" viewBox="0 0 100 100">
+                <defs>
+                  <linearGradient id="cov-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#00f5ff" />
+                    <stop offset="100%" stopColor="#7c3aed" />
+                  </linearGradient>
+                </defs>
+                <circle cx="50" cy="50" r="40" stroke="rgba(255,255,255,0.05)" strokeWidth="6" fill="transparent" />
+                <circle cx="50" cy="50" r="40" stroke="url(#cov-gradient)" strokeWidth="6" fill="transparent"
+                        strokeDasharray={2 * Math.PI * 40}
+                        strokeDashoffset={2 * Math.PI * 40 * (1 - hitCount / 16)}
+                        strokeLinecap="round"
+                        transform="rotate(-90 50 50)"
+                        style={{ transition: 'stroke-dashoffset 0.8s ease-out' }} />
+              </svg>
+              <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <span style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)' }}>{hitCount}</span>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  / 16 HIT
                 </span>
               </div>
             </div>
+            
+            <div style={{ marginTop: 16, textAlign: 'center', width: '100%' }}>
+              {leftMuscles.length === 0 ? (
+                 <p style={{ fontSize: 13, color: 'var(--accent-green)', fontWeight: 500, margin: 0 }}>All muscles hit!</p>
+              ) : (
+                 <>
+                   <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 8px 0' }}>Focus on:</p>
+                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center' }}>
+                     {leftMuscles.slice(0, 3).map(m => (
+                        <span key={m} style={{ fontSize: 11, padding: '4px 10px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, color: 'var(--text-primary)' }}>
+                          {MUSCLE_META[m].label}
+                        </span>
+                     ))}
+                     {leftMuscles.length > 3 && <span style={{ fontSize: 11, color: 'var(--text-muted)', alignSelf: 'center', padding: '4px 6px' }}>+{leftMuscles.length - 3}</span>}
+                   </div>
+                 </>
+              )}
+            </div>
           </div>
-        )}
       </div>
 
       {/* ⚡ Recovery Card */}
