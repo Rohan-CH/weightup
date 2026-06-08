@@ -14,6 +14,7 @@ import {
   Menu,
   X,
   Zap,
+  Layers,
 } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import ThemeToggle from './ThemeToggle';
@@ -23,6 +24,7 @@ const navLinks = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/log', label: 'Log Workout', icon: Dumbbell },
   { href: '/muscles', label: 'Muscles', icon: Zap },
+  { href: '/splits', label: 'Splits', icon: Layers },
   { href: '/circles', label: 'Circles', icon: Users },
   { href: '/leaderboard', label: 'Leaderboard', icon: Trophy },
   { href: '/profile', label: 'Profile', icon: User },

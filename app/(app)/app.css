@@ -1278,3 +1278,525 @@
     font-size: 22px !important;
   }
 }
+
+/* ============ SPLITS PAGE ============ */
+
+/* Selection grid — 2×2 on desktop, 1-col on mobile */
+.split-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 20px;
+  margin-bottom: 28px;
+}
+
+/* Large selection card */
+.split-card {
+  position: relative;
+  overflow: hidden;
+  padding: 28px 28px 24px;
+  background: var(--bg-card);
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.32, 0.72, 0, 1);
+  display: flex;
+  flex-direction: column;
+  min-height: 220px;
+}
+
+.split-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 30% 0%, var(--split-accent, rgba(0,245,255,0.06)) 0%, transparent 60%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.split-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--split-accent, var(--accent-cyan));
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3), 0 0 0 1px var(--split-accent, rgba(0,245,255,0.15));
+}
+
+.split-card:hover::before {
+  opacity: 1;
+}
+
+.split-card.active {
+  border-color: var(--split-accent, var(--accent-cyan));
+  box-shadow: 0 0 0 2px var(--split-accent, var(--accent-cyan)), 0 8px 32px rgba(0,0,0,0.25);
+}
+
+.split-card-number {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  font-size: 60px;
+  font-weight: 900;
+  line-height: 1;
+  opacity: 0.04;
+  pointer-events: none;
+  letter-spacing: -0.04em;
+}
+
+.split-card-title {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  line-height: 1.2;
+  position: relative;
+  z-index: 1;
+}
+
+.split-card-freq {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  width: fit-content;
+  position: relative;
+  z-index: 1;
+}
+
+.split-card-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  flex: 1;
+  position: relative;
+  z-index: 1;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.split-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16px;
+  position: relative;
+  z-index: 1;
+}
+
+.split-card-bestfor {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* Bubbles container inside split card */
+.split-card-bubbles {
+  display: flex;
+  align-items: center;
+}
+
+.split-card-bubble {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--bg-card);
+  overflow: hidden;
+  background: var(--bg-input);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  margin-left: -8px;
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+
+.split-card-bubble:first-child {
+  margin-left: 0;
+}
+
+.split-card-bubble:hover {
+  transform: scale(1.12);
+  z-index: 2;
+}
+
+.split-card-bubble img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.split-card-bubble-more {
+  background: rgba(0,245,255,0.1);
+  color: var(--accent-cyan);
+  font-size: 9px;
+  border-color: rgba(0,245,255,0.2);
+}
+
+/* Split detail header */
+.split-detail-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+.split-detail-title {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin-bottom: 4px;
+}
+
+.split-detail-desc {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  max-width: 640px;
+  margin-bottom: 12px;
+}
+
+.split-detail-meta {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+/* Circle members row in detail view */
+.split-members-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 28px;
+  padding: 14px 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+}
+
+.split-members-avatars {
+  display: flex;
+  align-items: center;
+}
+
+.split-members-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.split-members-label strong {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+/* Day cards */
+.split-days-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.split-day-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.split-day-card:hover {
+  border-color: var(--border-glow);
+}
+
+.split-day-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  gap: 12px;
+}
+
+.split-day-header:hover {
+  background: rgba(255,255,255,0.015);
+}
+
+.split-day-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.split-day-name {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.split-day-order {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-full);
+  background: rgba(124, 58, 237, 0.1);
+  color: var(--accent-purple);
+  font-size: 12px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.split-day-muscles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.split-day-body {
+  padding: 0 22px 20px;
+  border-top: 1px solid var(--border-color);
+}
+
+.split-day-exercises {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.split-day-exercise-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--bg-input);
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  gap: 8px;
+}
+
+.split-day-exercise-name {
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.split-day-add-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  margin-top: 12px;
+  border-radius: var(--radius-md);
+  background: transparent;
+  border: 1px dashed var(--border-color);
+  color: var(--accent-cyan);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: var(--font-family);
+  width: 100%;
+  justify-content: center;
+}
+
+.split-day-add-btn:hover {
+  border-color: var(--accent-cyan);
+  background: rgba(0,245,255,0.04);
+}
+
+/* Custom split builder modal */
+.split-builder-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 400;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.2s ease;
+  padding: 20px;
+}
+
+.split-builder {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  width: 100%;
+  max-width: 560px;
+  max-height: 85vh;
+  overflow-y: auto;
+  animation: scaleIn 0.25s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.split-builder-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  position: sticky;
+  top: 0;
+  background: var(--bg-secondary);
+  z-index: 1;
+}
+
+.split-builder-body {
+  padding: 20px 24px 28px;
+}
+
+.split-builder-day {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  margin-bottom: 12px;
+  background: var(--bg-input);
+}
+
+.split-builder-day-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.split-builder-add-day {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px;
+  border: 2px dashed var(--border-color);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: var(--font-family);
+  width: 100%;
+  margin-bottom: 20px;
+}
+
+.split-builder-add-day:hover {
+  border-color: var(--accent-purple);
+  color: var(--accent-purple);
+  background: rgba(124,58,237,0.04);
+}
+
+/* Change split button */
+.split-change-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: var(--font-family);
+  white-space: nowrap;
+}
+
+.split-change-btn:hover {
+  border-color: var(--border-glow);
+  background: var(--bg-card-hover);
+}
+
+/* Advantage callout */
+.split-advantage {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 18px;
+  background: rgba(16, 185, 129, 0.05);
+  border: 1px solid rgba(16, 185, 129, 0.12);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-bottom: 28px;
+}
+
+.split-advantage strong {
+  color: var(--accent-green);
+}
+
+/* ---- Splits Responsive ---- */
+@media (max-width: 768px) {
+  .split-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .split-card {
+    min-height: 180px;
+    padding: 22px 20px 20px;
+  }
+
+  .split-card-title {
+    font-size: 20px;
+  }
+
+  .split-detail-header {
+    flex-direction: column;
+  }
+
+  .split-detail-title {
+    font-size: 22px;
+  }
+}
+
+@media (max-width: 520px) {
+  .split-card-number {
+    font-size: 48px;
+  }
+
+  .split-day-header {
+    padding: 14px 16px;
+  }
+
+  .split-day-name {
+    font-size: 15px;
+  }
+
+  .split-members-row {
+    padding: 12px 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .split-card { transition: border-color 0.15s; }
+  .split-card:hover { transform: none; }
+}
