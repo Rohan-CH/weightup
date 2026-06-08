@@ -1052,13 +1052,13 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      <div className="dash-two-col-grid">
       {/* Recent Community Log */}
       {recentLog && (
         <button
           className="card dash-recent dash-stat-btn animate-fade-in-up"
           style={{
             width: '100%',
-            marginBottom: 28,
             animationDelay: '0.25s',
             borderLeft: '3px solid var(--accent-purple)',
             background: theme === 'light'
@@ -1097,7 +1097,6 @@ export default function DashboardPage() {
 
       {/* 🏆 PR Milestone Feed */}
       <div className="card animate-fade-in-up" style={{
-        marginBottom: 28,
         animationDelay: '0.27s',
         border: '1px solid var(--border-color)',
         background: theme === 'light'
@@ -1152,6 +1151,7 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
+      </div>
       </div>
 
       {/* Charts */}
