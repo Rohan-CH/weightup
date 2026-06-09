@@ -129,5 +129,3 @@ export function MusclesAnatomy3D({ muscleWork, onSelect, selectedMuscle }: Muscl
     </div>
   );
 }
-
-useGLTF.preload('/body.glb');

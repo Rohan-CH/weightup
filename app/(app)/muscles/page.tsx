@@ -1,13 +1,17 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Model from 'react-body-highlighter';
+import dynamic from 'next/dynamic';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight, Calendar, Dumbbell, Plus, Zap } from 'lucide-react';
 
 import { MuscleKey, MUSCLE_META, HIGHLIGHTER_MAP, getMusclesForExercise, hexToRgba } from '@/lib/muscle-utils';
-import { MusclesAnatomy3D } from '@/components/MusclesAnatomy3D';
+
+const MusclesAnatomy3D = dynamic(
+  () => import('@/components/MusclesAnatomy3D').then((mod) => mod.MusclesAnatomy3D),
+  { ssr: false, loading: () => <div style={{ height: '550px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Loading 3D Anatomy...</div> }
+);
 
 /* ─────────────────────────────────────────────────────────────
    INTENSITY HELPERS
