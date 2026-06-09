@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight, Calendar, Dumbbell, Plus, Zap } from 'lucide-react';
 
 import { MuscleKey, MUSCLE_META, HIGHLIGHTER_MAP, getMusclesForExercise, hexToRgba } from '@/lib/muscle-utils';
+import { MusclesAnatomy3D } from '@/components/MusclesAnatomy3D';
 
 /* ─────────────────────────────────────────────────────────────
    INTENSITY HELPERS
@@ -244,92 +245,13 @@ export default function MusclesPage() {
         <>
           {/* Body diagram + muscle detail panel */}
           <div className="muscles-layout">
-            {(() => {
-              const keys = Object.keys(MUSCLE_META) as MuscleKey[];
-              
-              // Build per-slug data: each library slug gets exactly one entry
-              // to avoid frequency accumulation when multiple MuscleKeys share a slug
-              const slugColor: Record<string, string> = {};
-              const slugName: Record<string, MuscleKey> = {};
-              
-              for (const k of keys) {
-                const isSelected = selected === k;
-                const sets = muscleWork[k] ?? 0;
-                const baseColor = MUSCLE_META[k].color;
-                const color = isSelected
-                  ? hexToRgba(baseColor, 1)
-                  : sets > 0
-                    ? hexToRgba(baseColor, 0.55)
-                    : theme === 'light'
-                      ? 'rgba(0,0,0,0.06)'
-                      : 'rgba(255,255,255,0.12)';
-                
-                for (const slug of HIGHLIGHTER_MAP[k]) {
-                  const unworkedColor = theme === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.12)';
-                  // Higher priority wins: selected > worked > unworked
-                  if (!slugColor[slug] || isSelected || (sets > 0 && slugColor[slug] === unworkedColor)) {
-                    slugColor[slug] = color;
-                    slugName[slug] = k;
-                  }
-                }
-              }
-              
-              const slugs = Object.keys(slugColor);
-              // Each slug gets frequency = index+1 → maps to highlightedColors[index]
-              const data = slugs.map((slug, i) => ({
-                name: slugName[slug],
-                muscles: [slug] as any[],
-                frequency: i + 1
-              }));
-              const highlightedColors = slugs.map(slug => slugColor[slug]);
-              
-              // Reverse-map for click handling
-              const reverseMap: Record<string, MuscleKey> = {};
-              for (const k of keys) {
-                for (const slug of HIGHLIGHTER_MAP[k]) {
-                  if (!reverseMap[slug]) reverseMap[slug] = k;
-                }
-              }
-              
-              const handleClick = (ex: any) => {
-                const slug = ex.muscle as string;
-                const k = reverseMap[slug];
-                if (k) setSelected(s => s === k ? null : k);
-              };
-              
-              return (
-                <div className="muscles-diagrams">
-                  <div className="muscles-diagram-wrap" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                    <Model
-                      data={data}
-                      bodyColor={theme === 'light' ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.12)'}
-                      style={{ width: '80%', height: 'auto', margin: '0 auto' }}
-                      svgStyle={{ overflow: 'visible' }}
-                      highlightedColors={highlightedColors}
-                      onClick={handleClick}
-                      type="anterior"
-                    />
-                    <div className="text-center mt-2 font-['Inter',sans-serif] tracking-[4px] text-sm font-bold" style={{ color: 'var(--text-muted)' }}>
-                      FRONT
-                    </div>
-                  </div>
-                  <div className="muscles-diagram-wrap" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                    <Model
-                      data={data}
-                      bodyColor={theme === 'light' ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.12)'}
-                      style={{ width: '80%', height: 'auto', margin: '0 auto' }}
-                      svgStyle={{ overflow: 'visible' }}
-                      highlightedColors={highlightedColors}
-                      onClick={handleClick}
-                      type="posterior"
-                    />
-                    <div className="text-center mt-2 font-['Inter',sans-serif] tracking-[4px] text-sm font-bold" style={{ color: 'var(--text-muted)' }}>
-                      BACK
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
+            <div className="muscles-diagrams" style={{ width: '100%', height: '550px' }}>
+              <MusclesAnatomy3D 
+                muscleWork={muscleWork}
+                selectedMuscle={selected}
+                onSelect={(m) => setSelected(s => s === m ? null : (m as MuscleKey))}
+              />
+            </div>
 
             {/* Side panel: legend + detail */}
             <div className="muscles-side">
