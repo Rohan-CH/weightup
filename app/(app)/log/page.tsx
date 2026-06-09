@@ -231,14 +231,14 @@ export default function LogWorkoutPage() {
 
     const { data } = await supabase
       .from('split_day_exercises')
-      .select('exercise_id, exercise_name')
+      .select('exercise_id, exercises(name)')
       .eq('split_day_id', splitDayId)
       .order('exercise_order', { ascending: true });
       
     if (data && data.length > 0) {
       const queue = data.map((d: any) => ({
         id: d.exercise_id,
-        name: d.exercise_name,
+        name: d.exercises?.name || 'Unknown',
       }));
       setSplitQueue(queue);
       setSelectedExercise(queue[0].id);
@@ -331,9 +331,22 @@ export default function LogWorkoutPage() {
     } else {
       setSuccess(`Logged ${validSets.length} set(s)!`);
       
-      // Keep one empty set, or carry over last weight
-      const lastSet = validSets[validSets.length - 1];
-      setSets([{ weight: lastSet ? lastSet.weight : '', reps: '' }]);
+      // Auto-advance if in split queue
+      if (splitQueue.length > 1 && splitQueue[0].id === selectedExercise) {
+        const nextQueue = splitQueue.slice(1);
+        setSplitQueue(nextQueue);
+        setSelectedExercise(nextQueue[0].id);
+        setSearchTerm(nextQueue[0].name);
+        setSets([{ weight: '', reps: '' }]); // reset sets for next exercise
+      } else if (splitQueue.length === 1 && splitQueue[0].id === selectedExercise) {
+        setSplitQueue([]); // finished the split!
+        setSplitDayName('');
+        setSets([{ weight: '', reps: '' }]);
+      } else {
+        // Keep one empty set, or carry over last weight
+        const lastSet = validSets[validSets.length - 1];
+        setSets([{ weight: lastSet ? lastSet.weight : '', reps: '' }]);
+      }
       
       // Start 90s rest timer
       setRestTimer(90);
@@ -408,30 +421,60 @@ export default function LogWorkoutPage() {
             </div>
           </div>
           {splitQueue.length > 1 ? (
-            <button
-              className="btn-primary"
-              style={{ fontSize: 12, padding: '6px 12px', minHeight: 0, gap: 4, background: 'linear-gradient(135deg, var(--accent-purple), #9333ea)' }}
-              onClick={() => {
-                const nextQueue = splitQueue.slice(1);
-                setSplitQueue(nextQueue);
-                setSelectedExercise(nextQueue[0].id);
-                setSearchTerm(nextQueue[0].name);
-              }}
-            >
-              Next Exercise
-              <ArrowRight size={14} />
-            </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                type="button"
+                className="btn-secondary"
+                style={{ fontSize: 12, padding: '6px 12px', minHeight: 0, background: 'rgba(255,255,255,0.05)', border: 'none' }}
+                onClick={() => {
+                  const nextQueue = splitQueue.slice(1);
+                  setSplitQueue(nextQueue);
+                  setSelectedExercise(nextQueue[0].id);
+                  setSearchTerm(nextQueue[0].name);
+                }}
+              >
+                Skip Exercise
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                style={{ fontSize: 12, padding: '6px 12px', minHeight: 0, gap: 4, background: 'linear-gradient(135deg, var(--accent-purple), #9333ea)' }}
+                onClick={() => {
+                  const nextQueue = splitQueue.slice(1);
+                  setSplitQueue(nextQueue);
+                  setSelectedExercise(nextQueue[0].id);
+                  setSearchTerm(nextQueue[0].name);
+                }}
+              >
+                Next Exercise
+                <ArrowRight size={14} />
+              </button>
+            </div>
           ) : (
-            <button
-              className="btn-secondary"
-              style={{ fontSize: 12, padding: '6px 12px', minHeight: 0 }}
-              onClick={() => {
-                setSplitQueue([]);
-                setSplitDayName('');
-              }}
-            >
-              Finish Split
-            </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                type="button"
+                className="btn-secondary"
+                style={{ fontSize: 12, padding: '6px 12px', minHeight: 0, background: 'rgba(255,255,255,0.05)', border: 'none' }}
+                onClick={() => {
+                  setSplitQueue([]);
+                  setSplitDayName('');
+                }}
+              >
+                Skip Exercise
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                style={{ fontSize: 12, padding: '6px 12px', minHeight: 0 }}
+                onClick={() => {
+                  setSplitQueue([]);
+                  setSplitDayName('');
+                }}
+              >
+                Finish Split
+              </button>
+            </div>
           )}
         </div>
       )}
@@ -604,7 +647,7 @@ export default function LogWorkoutPage() {
             <div style={{ padding: 12, marginBottom: 16, background: 'rgba(0,245,255,0.1)', border: '1px solid var(--accent-cyan)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
               <span style={{ fontSize: 18 }}>⏱️</span>
               <span style={{ color: 'var(--accent-cyan)', fontWeight: 700, fontSize: 16 }}>Rest Timer: {Math.floor(restTimer / 60)}:{(restTimer % 60).toString().padStart(2, '0')}</span>
-              <button type="button" onClick={() => setRestTimer(0)} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', marginLeft: 'auto' }}><X size={16}/></button>
+              <button type="button" onClick={() => setRestTimer(0)} style={{ background: 'rgba(0,245,255,0.2)', border: 'none', color: 'var(--accent-cyan)', cursor: 'pointer', marginLeft: 'auto', padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>Skip Rest</button>
             </div>
           )}
 
