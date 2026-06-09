@@ -115,50 +115,6 @@ export default function SplitsPage() {
 
   useEffect(() => { setMounted(true); }, []);
 
-  /* ─── Initial Data Load ─── */
-  const loadData = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    setCurrentUserId(user.id);
-
-    // 1. Fetch all splits user can see
-    const { data: splitsData } = await supabase
-      .from('splits')
-      .select('*')
-      .order('is_default', { ascending: false })
-      .order('name');
-    if (splitsData) setSplits(splitsData);
-
-    // 2. Check active user split
-    const { data: userSplit } = await supabase
-      .from('user_splits')
-      .select('*, splits(*)')
-      .eq('user_id', user.id)
-      .eq('is_active', true)
-      .limit(1)
-      .maybeSingle();
-
-    if (userSplit && userSplit.splits) {
-      const s = userSplit.splits as unknown as Split;
-      setActiveSplit(s);
-      await loadSplitDetail(s.id, user.id);
-      setView('detail');
-    } else {
-      setView('select');
-    }
-
-    // 3. Circle members' splits
-    await loadCircleMembers(user.id);
-
-    // 4. All exercises
-    const { data: exData } = await supabase
-      .from('exercises')
-      .select('id, name')
-      .order('name');
-    if (exData) setAllExercises(exData);
-  }, [supabase]);
-
-  useEffect(() => { loadData(); }, [loadData]);
 
   /* ─── Load detail for a specific split ─── */
   const loadSplitDetail = async (splitId: string, userId: string) => {
@@ -254,6 +210,52 @@ export default function SplitsPage() {
 
     setCircleSplitMembers(result);
   };
+
+  /* ─── Initial Data Load ─── */
+  const loadData = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    setCurrentUserId(user.id);
+
+    // 1. Fetch all splits user can see
+    const { data: splitsData } = await supabase
+      .from('splits')
+      .select('*')
+      .order('is_default', { ascending: false })
+      .order('name');
+    if (splitsData) setSplits(splitsData);
+
+    // 2. Check active user split
+    const { data: userSplit } = await supabase
+      .from('user_splits')
+      .select('*, splits(*)')
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .limit(1)
+      .maybeSingle();
+
+    if (userSplit && userSplit.splits) {
+      const s = userSplit.splits as unknown as Split;
+      setActiveSplit(s);
+      await loadSplitDetail(s.id, user.id);
+      setView('detail');
+    } else {
+      setView('select');
+    }
+
+    // 3. Circle members' splits
+    await loadCircleMembers(user.id);
+
+    // 4. All exercises
+    const { data: exData } = await supabase
+      .from('exercises')
+      .select('id, name')
+      .order('name');
+    if (exData) setAllExercises(exData);
+  }, [supabase]);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
 
   /* ─── Select a split ─── */
   const selectSplit = async (split: Split) => {

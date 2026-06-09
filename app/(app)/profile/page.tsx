@@ -41,10 +41,6 @@ export default function ProfilePage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const supabase = createClient();
 
-  useEffect(() => {
-    fetchProfile();
-    fetchStats();
-  }, []);
 
   const fetchProfile = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -96,6 +92,11 @@ export default function ProfilePage() {
       });
     }
   };
+
+  useEffect(() => {
+    fetchProfile();
+    fetchStats();
+  }, []);
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

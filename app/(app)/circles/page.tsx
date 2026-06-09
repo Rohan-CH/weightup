@@ -116,6 +116,7 @@ function CirclesPageInner() {
 
   // member detail
   const [activeMember, setActiveMember] = useState<Member | null>(null);
+  const [memberStats, setMemberStats] = useState<{ totalLogs: number; uniqueExercises: number; totalDays: number } | null>(null);
   const [memberLogs, setMemberLogs] = useState<MemberLog[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
   const [memberRx, setMemberRx] = useState<Reaction[]>([]);
@@ -350,7 +351,16 @@ function CirclesPageInner() {
       .eq('user_id', member.user_id)
       .order('logged_at', { ascending: false })
       .order('created_at', { ascending: false });
-    if (data) setMemberLogs(data as any);
+    if (data) {
+      setMemberLogs(data as any);
+      const uniqueExercises = new Set(data.map((l: any) => l.exercises?.name).filter(Boolean)).size;
+      const uniqueDays = new Set(data.map((l: any) => l.logged_at)).size;
+      setMemberStats({
+        totalLogs: data.length,
+        uniqueExercises,
+        totalDays: uniqueDays,
+      });
+    }
 
     // reactions on this member's logs (orbit around weight + tap to react)
     if (data && data.length > 0) {
@@ -644,6 +654,23 @@ function CirclesPageInner() {
           </div>
         </div>
 
+        {memberStats && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 24 }}>
+            <div className="card" style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Total Workouts</div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>{memberStats.totalLogs}</div>
+            </div>
+            <div className="card" style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Exercises</div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>{memberStats.uniqueExercises}</div>
+            </div>
+            <div className="card" style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Active Days</div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>{memberStats.totalDays}</div>
+            </div>
+          </div>
+        )}
+
         {logsLoading ? (
           <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
             <div className="spinner spinner-lg" />
@@ -928,13 +955,20 @@ function CirclesPageInner() {
                       {/* Top row: Avatar, Name, Date -- Exercise, Weight, Reps */}
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                          {log.avatar_url ? (
-                            <img src={log.avatar_url} alt="" className="avatar" style={{ width: 32, height: 32 }} />
-                          ) : (
-                            <div className="avatar-placeholder" style={{ width: 32, height: 32, fontSize: 13 }}>
-                              {log.username.charAt(0).toUpperCase()}
-                            </div>
-                          )}
+                          <button 
+                            type="button" 
+                            style={{ padding: 0, margin: 0, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                            onClick={() => openMember({ user_id: log.user_id, username: log.username, avatar_url: log.avatar_url, role: 'member' })}
+                            aria-label={`View ${log.username}'s profile`}
+                          >
+                            {log.avatar_url ? (
+                              <img src={log.avatar_url} alt="" className="avatar" style={{ width: 32, height: 32 }} />
+                            ) : (
+                              <div className="avatar-placeholder" style={{ width: 32, height: 32, fontSize: 13 }}>
+                                {log.username.charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                          </button>
                           <div>
                             <div style={{ fontWeight: 600, fontSize: 14 }}>{log.username}</div>
                             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>

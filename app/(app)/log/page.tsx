@@ -65,21 +65,6 @@ export default function LogWorkoutPage() {
 
   const supabase = createClient();
 
-  useEffect(() => {
-    fetchExercises();
-    fetchLogs();
-  }, []);
-
-  useEffect(() => {
-    if (searchTerm) {
-      const filtered = exercises.filter(e =>
-        e.name.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-      setFilteredExercises(filtered);
-    } else {
-      setFilteredExercises(exercises);
-    }
-  }, [searchTerm, exercises]);
 
   const fetchExercises = async () => {
     const { data } = await supabase
@@ -180,6 +165,23 @@ export default function LogWorkoutPage() {
     
     setLogLoading(false);
   };
+
+  useEffect(() => {
+    fetchExercises();
+    fetchLogs();
+  }, []);
+
+  useEffect(() => {
+    if (searchTerm) {
+      const filtered = exercises.filter(e =>
+        e.name.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      setFilteredExercises(filtered);
+    } else {
+      setFilteredExercises(exercises);
+    }
+  }, [searchTerm, exercises]);
+
 
   const handleAddExercise = async () => {
     if (!newExerciseName.trim()) return;

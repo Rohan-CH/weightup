@@ -465,7 +465,7 @@ function WeekCalendar({ weekStart, setWeekStart, activeWeeks, onClose }: any) {
   const prevMonth = () => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1));
 
   const weeks = [];
-  let curr = new Date(month);
+  const curr = new Date(month);
   curr.setDate(1);
   while (curr.getDay() !== 1) curr.setDate(curr.getDate() - 1); // Rewind to Monday
   

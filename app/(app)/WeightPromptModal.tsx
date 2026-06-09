@@ -92,9 +92,13 @@ export default function WeightPromptModal() {
             <Activity size={24} />
           </div>
           <h2 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 8px 0' }}>Update Your Weight</h2>
-          <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 24, lineHeight: 1.5 }}>
-            It's been a while since you logged your body weight. Tracking this helps measure progress!
+          <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 12, lineHeight: 1.5 }}>
+            It&apos;s been a while since you logged your body weight. Tracking this helps measure progress!
           </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)', fontSize: 12, marginBottom: 24, padding: '8px 12px', background: 'rgba(255, 255, 255, 0.05)', borderRadius: 8 }}>
+            <span style={{ fontSize: 16 }}>🔒</span>
+            <p style={{ margin: 0, lineHeight: 1.4 }}>Your weight logging is completely private. Other users in your circles cannot see your weight or height.</p>
+          </div>
           
           <div style={{ width: '100%', marginBottom: 24 }}>
             <input
