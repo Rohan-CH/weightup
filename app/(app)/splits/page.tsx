@@ -485,7 +485,7 @@ export default function SplitsPage() {
     const circleSplits = splits.filter(s => !s.is_default && s.created_by !== currentUserId);
 
     return (
-      <div className="animate-fade-in-up">
+      <div className="animate-fade-in-up" style={{ maxWidth: 900, margin: '0 auto' }}>
         <div className="page-header">
           <h1 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <Layers size={26} style={{ color: 'var(--accent-cyan)' }} />
@@ -788,7 +788,7 @@ export default function SplitsPage() {
     const members = getMembersForSplit(activeSplit.id);
 
     return (
-      <div className="animate-fade-in-up">
+      <div className="animate-fade-in-up" style={{ maxWidth: 900, margin: '0 auto' }}>
         {/* Header */}
         <div className="split-detail-header">
           <div>
