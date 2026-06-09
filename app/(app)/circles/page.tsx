@@ -21,6 +21,7 @@ import {
   Layers, ChevronDown, ChevronUp, Trophy, ArrowRight,
   Medal, Award
 } from 'lucide-react';
+import { LineChart, Line, ResponsiveContainer, YAxis } from 'recharts';
 import UserProfileModal from '../UserProfileModal';
 
 interface Circle {
@@ -60,9 +61,13 @@ interface FeedLog {
   username: string;
   avatar_url: string | null;
   exercise_name: string;
+  exercise_id: string;
   weight_kg: number;
   reps: number;
   logged_at: string;
+  created_at: string;
+  last_activity_at: number;
+  sparkline?: { date: string; e1RM: number }[];
 }
 
 interface Reaction {
@@ -439,7 +444,7 @@ function CirclesPageInner() {
     // 1. Fetch recent logs by members
     const { data: recentLogs } = await supabase
       .from('workout_logs')
-      .select('id, user_id, weight_kg, reps, logged_at, created_at, exercises(name), profiles(username, avatar_url)')
+      .select('id, user_id, exercise_id, weight_kg, reps, logged_at, created_at, exercises(name), profiles(username, avatar_url)')
       .in('user_id', memberIds)
       .order('created_at', { ascending: false })
       .limit(50);
@@ -462,7 +467,7 @@ function CirclesPageInner() {
     if (missingLogIds.length > 0) {
       const { data } = await supabase
         .from('workout_logs')
-        .select('id, user_id, weight_kg, reps, logged_at, created_at, exercises(name), profiles(username, avatar_url)')
+        .select('id, user_id, exercise_id, weight_kg, reps, logged_at, created_at, exercises(name), profiles(username, avatar_url)')
         .in('id', missingLogIds);
       extraLogs = (data || []).filter((l: any) => memberIds.includes(l.user_id));
     }
@@ -494,7 +499,35 @@ function CirclesPageInner() {
     }));
     setComments(fetchedComments);
 
-    // 5. Calculate last_activity_at and sort
+    // 5. Fetch Sparklines Data
+    const feedExerciseIds = Array.from(new Set(allFeedLogs.map((l: any) => l.exercise_id).filter(Boolean)));
+    let sparklineData: any[] = [];
+    if (feedExerciseIds.length > 0 && memberIds.length > 0) {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const { data: slData } = await supabase
+        .from('workout_logs')
+        .select('user_id, exercise_id, weight_kg, reps, logged_at')
+        .in('exercise_id', feedExerciseIds)
+        .in('user_id', memberIds)
+        .gte('logged_at', thirtyDaysAgo.toISOString().split('T')[0])
+        .order('logged_at', { ascending: true });
+      sparklineData = slData || [];
+    }
+
+    const sparklineMap: Record<string, Record<string, any[]>> = {};
+    sparklineData.forEach((l: any) => {
+      if (!sparklineMap[l.user_id]) sparklineMap[l.user_id] = {};
+      if (!sparklineMap[l.user_id][l.exercise_id]) sparklineMap[l.user_id][l.exercise_id] = [];
+      const reps = l.reps || 1;
+      const e1RM = reps > 1 ? l.weight_kg * (36 / (37 - reps)) : l.weight_kg;
+      sparklineMap[l.user_id][l.exercise_id].push({
+        date: l.logged_at,
+        e1RM: Math.round(e1RM),
+      });
+    });
+
+    // 6. Calculate last_activity_at and sort
     const feedWithActivity = allFeedLogs.map((l: any) => {
       let lastActivity = new Date(l.created_at).getTime();
       const logComms = fetchedComments.filter((c: any) => c.log_id === l.id);
@@ -502,17 +535,24 @@ function CirclesPageInner() {
         const cTime = new Date(c.created_at).getTime();
         if (cTime > lastActivity) lastActivity = cTime;
       });
+
+      const userSparklines = sparklineMap[l.user_id] || {};
+      const slRaw = userSparklines[l.exercise_id] || [];
+      const slFiltered = slRaw.filter(sl => sl.date <= l.logged_at);
+
       return {
         id: l.id,
         user_id: l.user_id,
         username: l.profiles?.username || 'Unknown',
         avatar_url: l.profiles?.avatar_url || null,
         exercise_name: l.exercises?.name || 'Unknown',
+        exercise_id: l.exercise_id,
         weight_kg: l.weight_kg,
         reps: l.reps,
         logged_at: l.logged_at,
         created_at: l.created_at,
-        last_activity_at: lastActivity
+        last_activity_at: lastActivity,
+        sparkline: slFiltered,
       };
     });
 
@@ -626,7 +666,7 @@ function CirclesPageInner() {
       setLbLoading(true);
       const { data: logs } = await supabase
         .from('workout_logs')
-        .select('user_id, weight_kg')
+        .select('user_id, weight_kg, reps')
         .eq('exercise_id', lbSelectedExercise)
         .in('user_id', memberIds);
 
@@ -634,8 +674,10 @@ function CirclesPageInner() {
 
       const userMax: Record<string, number> = {};
       logs.forEach((l: any) => {
-        if (!userMax[l.user_id] || l.weight_kg > userMax[l.user_id]) {
-          userMax[l.user_id] = l.weight_kg;
+        const reps = l.reps || 1;
+        const e1RM = reps > 1 ? l.weight_kg * (36 / (37 - reps)) : l.weight_kg;
+        if (!userMax[l.user_id] || e1RM > userMax[l.user_id]) {
+          userMax[l.user_id] = Math.round(e1RM);
         }
       });
 
@@ -672,7 +714,7 @@ function CirclesPageInner() {
 
       const { data: logs } = await supabase
         .from('workout_logs')
-        .select('user_id, exercise_id, weight_kg')
+        .select('user_id, exercise_id, weight_kg, reps')
         .in('exercise_id', exerciseIds)
         .in('user_id', memberIds);
 
@@ -682,8 +724,10 @@ function CirclesPageInner() {
       logs.forEach((l: any) => {
         if (!userExerciseMax[l.user_id]) userExerciseMax[l.user_id] = {};
         const exName = exerciseMap[l.exercise_id];
-        if (!userExerciseMax[l.user_id][exName] || l.weight_kg > userExerciseMax[l.user_id][exName]) {
-          userExerciseMax[l.user_id][exName] = l.weight_kg;
+        const reps = l.reps || 1;
+        const e1RM = reps > 1 ? l.weight_kg * (36 / (37 - reps)) : l.weight_kg;
+        if (!userExerciseMax[l.user_id][exName] || e1RM > userExerciseMax[l.user_id][exName]) {
+          userExerciseMax[l.user_id][exName] = Math.round(e1RM);
         }
       });
 
@@ -1167,6 +1211,29 @@ function CirclesPageInner() {
                         </div>
                       </div>
 
+                      {/* Sparkline Progress Chart (only if data points > 1) */}
+                      {log.sparkline && log.sparkline.length > 1 && (
+                        <div style={{ height: 60, marginTop: 4, marginBottom: 8, padding: '0 4px' }}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={log.sparkline}>
+                              <YAxis domain={['dataMin', 'dataMax']} hide />
+                              <Line 
+                                type="monotone" 
+                                dataKey="e1RM" 
+                                stroke="var(--accent-purple)" 
+                                strokeWidth={2} 
+                                dot={{ r: 2, fill: "var(--accent-purple)", strokeWidth: 0 }} 
+                                activeDot={{ r: 4 }}
+                                isAnimationActive={false}
+                              />
+                            </LineChart>
+                          </ResponsiveContainer>
+                          <div style={{ fontSize: 10, color: 'var(--text-muted)', textAlign: 'right', marginTop: 2 }}>
+                            Est. 1RM Progression
+                          </div>
+                        </div>
+                      )}
+
                       {/* Comments List (only if they exist) */}
                       {logComments.length > 0 && (
                         <div style={{ display: 'grid', gap: 4, background: 'var(--bg-primary)', padding: '10px 12px', borderRadius: 8 }}>
@@ -1326,7 +1393,7 @@ function CirclesPageInner() {
                         <tr>
                           <th style={{ width: 60 }}>Rank</th>
                           <th>Athlete</th>
-                          <th>Max Weight</th>
+                          <th>Est. 1RM</th>
                         </tr>
                       </thead>
                       <tbody>

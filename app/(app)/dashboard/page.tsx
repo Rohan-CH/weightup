@@ -19,9 +19,10 @@ import {
 interface ExerciseChart {
   exerciseName: string;
   exerciseId: string;
-  data: { date: string; weight: number; volume: number }[];
+  data: { date: string; weight: number; volume: number; estimated1RM: number }[];
   maxWeight: number;
   maxVolume: number;
+  max1RM: number;
   totalSessions: number;
   targetMuscles?: string[] | null;
 }
@@ -155,7 +156,7 @@ export default function DashboardPage() {
   const [openDrawer, setOpenDrawer] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   
-  const [chartMetric, setChartMetric] = useState<'pb' | 'volume'>('pb');
+  const [chartMetric, setChartMetric] = useState<'pb' | 'volume' | '1rm'>('pb');
   const [recovery, setRecovery] = useState(100);
   const [hoursSinceLastLog, setHoursSinceLastLog] = useState<number | null>(null);
   const [fatigueScores, setFatigueScores] = useState<Record<MuscleKey, number>>({} as any);
@@ -296,30 +297,39 @@ export default function DashboardPage() {
           targetMuscles,
         });
 
-        const byDate = exerciseLogs.reduce((acc: Record<string, { weight: number; volume: number }>, l: any) => {
+        const byDate = exerciseLogs.reduce((acc: Record<string, { weight: number; volume: number; estimated1RM: number }>, l: any) => {
           const vol = (l.weight_kg || 0) * (l.reps || 0);
+          const reps = l.reps || 1;
+          const e1RM = reps > 1 ? l.weight_kg * (36 / (37 - reps)) : l.weight_kg;
+
           if (!acc[l.logged_at]) {
-            acc[l.logged_at] = { weight: l.weight_kg, volume: vol };
+            acc[l.logged_at] = { weight: l.weight_kg, volume: vol, estimated1RM: e1RM };
           } else {
             acc[l.logged_at].volume += vol;
             if (l.weight_kg > acc[l.logged_at].weight) {
               acc[l.logged_at].weight = l.weight_kg;
             }
+            if (e1RM > acc[l.logged_at].estimated1RM) {
+              acc[l.logged_at].estimated1RM = e1RM;
+            }
           }
           return acc;
-        }, {} as Record<string, { weight: number; volume: number }>);
+        }, {} as Record<string, { weight: number; volume: number; estimated1RM: number }>);
 
         const data = Object.entries(byDate)
           .map(([date, val]: [string, any]) => ({
             date,
             weight: Number(val.weight),
             volume: Number(val.volume),
+            estimated1RM: Math.round(Number(val.estimated1RM)),
           }))
           .sort((a, b) => a.date.localeCompare(b.date));
 
         let maxVolume = 0;
+        let max1RM = 0;
         Object.values(byDate).forEach((val: any) => {
           if (val.volume > maxVolume) maxVolume = val.volume;
+          if (val.estimated1RM > max1RM) max1RM = Math.round(val.estimated1RM);
         });
 
         return {
@@ -328,6 +338,7 @@ export default function DashboardPage() {
           data,
           maxWeight: best.weight_kg,
           maxVolume,
+          max1RM,
           totalSessions: counts[eid],
           targetMuscles,
         };
@@ -565,7 +576,18 @@ export default function DashboardPage() {
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
-      const isVol = chartMetric === 'volume';
+      const metricType = chartMetric;
+      let labelText = 'Max Weight: ';
+      let color = 'var(--accent-purple)';
+      
+      if (metricType === 'volume') {
+        labelText = 'Total Volume: ';
+        color = 'var(--accent-cyan)';
+      } else if (metricType === '1rm') {
+        labelText = 'Estimated 1RM: ';
+        color = 'var(--accent-orange)';
+      }
+
       return (
         <div style={{
           background: 'var(--bg-secondary)',
@@ -577,8 +599,8 @@ export default function DashboardPage() {
         }}>
           <p style={{ color: 'var(--text-secondary)', marginBottom: 4 }}>{label}</p>
           <p style={{ color: 'var(--text-primary)', fontWeight: 700 }}>
-            {isVol ? 'Total Volume: ' : 'Max Weight: '}
-            <span style={{ color: isVol ? 'var(--accent-cyan)' : 'var(--accent-purple)' }}>{payload[0].value} kg</span>
+            {labelText}
+            <span style={{ color }}>{payload[0].value} kg</span>
           </p>
         </div>
       );
@@ -596,6 +618,33 @@ export default function DashboardPage() {
 
   const weekDelta = stats.thisWeekLogs - stats.lastWeekLogs;
 
+  // Deriving "What to Train Today" CTA
+  const recoveredMuscles = Object.entries(fatigueScores)
+    .filter(([_, score]) => score < 30)
+    .map(([key]) => key as MuscleKey);
+  
+  let ctaTitle = "Rest Day Recommended";
+  let ctaText = "Most of your muscles are heavily fatigued. Consider taking a rest day or doing light cardio!";
+  let ctaAction = "Log Active Recovery";
+  let ctaIcon = <Activity size={24} style={{ color: 'var(--accent-cyan)' }} />;
+  let ctaPath = "/log";
+
+  if (recoveredMuscles.length > 0) {
+    if (recoveredMuscles.length === Object.keys(MUSCLE_META).length) {
+      ctaTitle = "Fully Recovered!";
+      ctaText = "All your muscle groups are fully recovered. It's a great day to start a new split!";
+      ctaAction = "Start a Split";
+      ctaIcon = <Target size={24} style={{ color: 'var(--accent-green)' }} />;
+      ctaPath = "/splits";
+    } else {
+      const topRecovered = recoveredMuscles.slice(0, 3).map(m => MUSCLE_META[m].label);
+      ctaTitle = "Ready to Train";
+      ctaText = `Your ${topRecovered.join(', ')} are recovered. Today is a great day to target them!`;
+      ctaAction = "Log Workout";
+      ctaIcon = <Flame size={24} style={{ color: 'var(--accent-orange)' }} />;
+      ctaPath = "/log";
+    }
+  }
 
   return (
     <div className="animate-fade-in-up">
@@ -616,6 +665,45 @@ export default function DashboardPage() {
             <ChevronRight size={14} style={{ opacity: 0.6 }} />
           </button>
         )}
+      </div>
+
+      {/* What to Train Today CTA Banner */}
+      <div className="card animate-fade-in-up" style={{
+        marginBottom: 24,
+        border: '1px solid var(--border-color)',
+        padding: '20px',
+        borderRadius: 'var(--radius-lg)',
+        background: theme === 'light'
+          ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(245, 245, 250, 0.9))'
+          : 'linear-gradient(135deg, rgba(30, 30, 40, 0.8), rgba(20, 20, 30, 0.8))',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 16,
+        flexWrap: 'wrap'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flex: 1, minWidth: 250 }}>
+          <div style={{ 
+            width: 48, height: 48, borderRadius: '50%', 
+            background: 'var(--bg-tertiary)', 
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: 'var(--shadow-sm)'
+          }}>
+            {ctaIcon}
+          </div>
+          <div>
+            <h3 style={{ margin: '0 0 4px 0', fontSize: 18 }}>{ctaTitle}</h3>
+            <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 14 }}>{ctaText}</p>
+          </div>
+        </div>
+        <button 
+          onClick={() => router.push(ctaPath)}
+          className="btn btn-primary"
+          style={{ whiteSpace: 'nowrap' }}
+        >
+          {ctaAction}
+          <ArrowRight size={16} style={{ marginLeft: 6 }} />
+        </button>
       </div>
 
       {/* Quick Actions */}
@@ -1141,6 +1229,23 @@ export default function DashboardPage() {
               >
                 Total Volume
               </button>
+              <button
+                onClick={() => setChartMetric('1rm')}
+                style={{
+                  background: chartMetric === '1rm' ? 'var(--bg-secondary)' : 'transparent',
+                  color: chartMetric === '1rm' ? 'var(--text-primary)' : 'var(--text-muted)',
+                  border: 'none',
+                  padding: '5px 12px',
+                  borderRadius: 6,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  boxShadow: chartMetric === '1rm' ? 'var(--shadow-card)' : 'none',
+                }}
+              >
+                Est. 1RM
+              </button>
             </div>
           </div>
 
@@ -1178,9 +1283,9 @@ export default function DashboardPage() {
 
                 {/* Mini stats row */}
                 <div className="dash-chart-meta">
-                  <span className="dash-chart-meta-item" title={chartMetric === 'pb' ? "Personal Best (Maximum weight lifted)" : "Max Day Volume"}>
+                  <span className="dash-chart-meta-item" title={chartMetric === 'pb' ? "Personal Best (Maximum weight lifted)" : chartMetric === '1rm' ? "Estimated 1 Rep Max" : "Max Day Volume"}>
                     <Award size={11} style={{ color: chartColor }} />
-                    {chartMetric === 'pb' ? <>PB: <strong>{chart.maxWeight}kg</strong></> : <>Max Vol: <strong>{chart.maxVolume}kg</strong></>}
+                    {chartMetric === 'pb' ? <>PB: <strong>{chart.maxWeight}kg</strong></> : chartMetric === '1rm' ? <>1RM: <strong>{chart.max1RM}kg</strong></> : <>Max Vol: <strong>{chart.maxVolume}kg</strong></>}
                   </span>
                   <span className="dash-chart-meta-item">
                     <Calendar size={11} style={{ color: 'var(--text-muted)' }} />
@@ -1215,7 +1320,7 @@ export default function DashboardPage() {
                     <Tooltip content={<CustomTooltip />} />
                     <Area
                       type="monotone"
-                      dataKey={chartMetric === 'pb' ? 'weight' : 'volume'}
+                      dataKey={chartMetric === 'pb' ? 'weight' : chartMetric === '1rm' ? 'estimated1RM' : 'volume'}
                       stroke={chartColor}
                       strokeWidth={2}
                       fill={`url(#grad-${chart.exerciseId})`}
