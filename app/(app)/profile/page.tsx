@@ -24,6 +24,22 @@ interface PersonalStats {
   totalDays: number;
 }
 
+const getHeatmapGrid = () => {
+  const dates = [];
+  const now = new Date();
+  const startDate = new Date(now);
+  startDate.setDate(now.getDate() - 364);
+  const startDay = startDate.getDay();
+  startDate.setDate(startDate.getDate() - startDay);
+  
+  const cursor = new Date(startDate);
+  for (let i = 0; i < 371; i++) {
+    dates.push(new Date(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return dates;
+};
+
 export default function ProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [username, setUsername] = useState('');
@@ -40,6 +56,21 @@ export default function ProfilePage() {
   const [error, setError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const supabase = createClient();
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [fatigue, setFatigue] = useState({ score: 1.0, label: 'Optimal', color: 'var(--accent-cyan)' });
+  const [dailyLogCounts, setDailyLogCounts] = useState<Record<string, number>>({});
+  const [hoveredDay, setHoveredDay] = useState<{ date: string; count: number; x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    const checkTheme = () => {
+      const isL = document.documentElement.getAttribute('data-theme') === 'light';
+      setTheme(isL ? 'light' : 'dark');
+    };
+    checkTheme();
+    const observer = new MutationObserver(checkTheme);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
+  }, []);
 
 
   const fetchProfile = async () => {
@@ -90,6 +121,61 @@ export default function ProfilePage() {
         uniqueExercises,
         totalDays: uniqueDays,
       });
+
+      const counts: Record<string, number> = {};
+      const today = new Date();
+      const dayStr = (d: Date) => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+      };
+
+      const date7 = new Date(today); date7.setDate(today.getDate() - 7);
+      const str7 = dayStr(date7);
+      
+      const date28 = new Date(today); date28.setDate(today.getDate() - 28);
+      const str28 = dayStr(date28);
+      
+      let acuteSets = 0;
+      let total28Sets = 0;
+
+      logs.forEach((l: any) => {
+        if (l.logged_at) {
+          counts[l.logged_at] = (counts[l.logged_at] || 0) + 1;
+          if (l.logged_at >= str28) {
+            total28Sets++;
+            if (l.logged_at >= str7) {
+              acuteSets++;
+            }
+          }
+        }
+      });
+      setDailyLogCounts(counts);
+
+      const chronicWeekly = total28Sets / 4;
+      let ratio = 1.0;
+      if (chronicWeekly > 0) {
+        ratio = acuteSets / chronicWeekly;
+      } else if (acuteSets > 0) {
+        ratio = 1.5;
+      }
+      
+      let fLabel = 'Optimal';
+      let fColor = 'var(--accent-cyan)';
+      
+      if (ratio < 0.8) {
+        fLabel = 'Under-trained';
+        fColor = 'var(--text-muted)';
+      } else if (ratio > 1.5) {
+        fLabel = 'Overreaching';
+        fColor = 'var(--accent-orange)';
+      } else if (ratio > 1.3) {
+        fLabel = 'High Fatigue';
+        fColor = '#ff4d4d';
+      }
+      
+      setFatigue({ score: ratio, label: fLabel, color: fColor });
     }
   };
 
@@ -208,6 +294,19 @@ export default function ProfilePage() {
     setSavingWeight(false);
   };
 
+  const gridDates = getHeatmapGrid();
+  const monthLabels: { label: string; index: number }[] = [];
+  let prevMonth = -1;
+  gridDates.forEach((d, i) => {
+    if (i % 7 === 0) {
+      const month = d.getMonth();
+      if (month !== prevMonth) {
+        monthLabels.push({ label: d.toLocaleDateString(undefined, { month: 'short' }), index: Math.floor(i / 7) });
+        prevMonth = month;
+      }
+    }
+  });
+
   if (loading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
@@ -221,6 +320,104 @@ export default function ProfilePage() {
       <div className="page-header">
         <h1>Profile</h1>
         <p>Manage your account and view your stats</p>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))', gap: 24, marginBottom: 24 }}>
+        {/* Fatigue Card */}
+        <div className="card">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <Activity size={18} style={{ color: fatigue.color }} />
+            <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Fatigue Level</h3>
+          </div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: fatigue.color }}>
+            {fatigue.label}
+          </div>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
+            Acute:Chronic Workload Ratio ({fatigue.score.toFixed(2)})
+          </p>
+        </div>
+
+        {/* 📅 Consistency Heatmap Card */}
+        <div className="card" style={{
+          overflow: 'hidden',
+          position: 'relative'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+            <Calendar size={18} style={{ color: 'var(--accent-purple)' }} />
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Yearly Consistency</h3>
+          </div>
+          <div style={{ width: '100%', overflowX: 'auto', paddingBottom: 8 }} className="no-scrollbar">
+            <div style={{ display: 'flex', gap: 8, minWidth: 720 }}>
+              {/* Day labels on the left */}
+              <div style={{
+                display: 'grid',
+                gridTemplateRows: 'repeat(7, 10px)',
+                gap: '3px',
+                padding: '18px 0 4px',
+                fontSize: 9,
+                color: 'var(--text-muted)',
+                textAlign: 'right',
+                lineHeight: '10px',
+                width: 24,
+                flexShrink: 0
+              }}>
+                <div></div><div>Mon</div><div></div><div>Wed</div><div></div><div>Fri</div><div></div>
+              </div>
+
+              {/* Month labels + grid on the right */}
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(53, 10px)', gap: '3px', fontSize: 9, color: 'var(--text-muted)', marginBottom: 4 }}>
+                  {Array.from({ length: 53 }).map((_, i) => {
+                    const labelObj = monthLabels.find(l => l.index === i);
+                    return <div key={i} style={{ gridColumnStart: i + 1, gridColumnEnd: i + 3, gridRow: 1, whiteSpace: 'nowrap' }}>{labelObj ? labelObj.label : ''}</div>;
+                  })}
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateRows: 'repeat(7, 10px)', gridAutoFlow: 'column', gap: '3px' }}>
+                  {gridDates.map((d, idx) => {
+                    const dStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                    const count = dailyLogCounts[dStr] || 0;
+                    const opacity = count === 0 ? 1 : count === 1 ? 0.35 : count === 2 ? 0.6 : count === 3 ? 0.8 : 1.0;
+                    const color = 'var(--accent-purple)';
+                    return (
+                      <div
+                        key={idx}
+                        onMouseEnter={(e) => {
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          setHoveredDay({
+                            date: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }),
+                            count,
+                            x: rect.left + window.scrollX + rect.width / 2,
+                            y: rect.top + window.scrollY - 38
+                          });
+                        }}
+                        onMouseLeave={() => setHoveredDay(null)}
+                        style={{
+                          width: 10, height: 10, borderRadius: 2,
+                          background: count === 0 ? (theme === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.04)') : color,
+                          opacity,
+                          boxShadow: count > 3 ? `0 0 6px ${color}` : 'none',
+                          cursor: 'pointer', transition: 'transform 0.1s ease, background-color 0.2s',
+                        }}
+                        className="heatmap-cell"
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+          {/* Legend */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, marginTop: 12, fontSize: 10, color: 'var(--text-muted)' }}>
+            <span>Less</span>
+            <div style={{ width: 10, height: 10, borderRadius: 2, background: theme === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.04)' }} />
+            <div style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--accent-purple)', opacity: 0.35 }} />
+            <div style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--accent-purple)', opacity: 0.6 }} />
+            <div style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--accent-purple)', opacity: 0.8 }} />
+            <div style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--accent-purple)', opacity: 1.0, boxShadow: '0 0 4px var(--accent-purple)' }} />
+            <span>More</span>
+          </div>
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))', gap: 24, alignItems: 'start' }}>
@@ -413,6 +610,28 @@ export default function ProfilePage() {
           </div>
         </div>
       </div>
+
+      {hoveredDay && (
+        <div style={{
+          position: 'absolute',
+          left: hoveredDay.x,
+          top: hoveredDay.y,
+          transform: 'translate(-50%, -100%)',
+          background: 'var(--bg-elevated)',
+          border: '1px solid var(--border-color)',
+          padding: '6px 10px',
+          borderRadius: 6,
+          fontSize: 12,
+          color: 'var(--text-primary)',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+          zIndex: 100,
+          pointerEvents: 'none',
+          whiteSpace: 'nowrap'
+        }}>
+          <div style={{ fontWeight: 600, marginBottom: 2 }}>{hoveredDay.count} workouts</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 10 }}>{hoveredDay.date}</div>
+        </div>
+      )}
     </div>
   );
 }

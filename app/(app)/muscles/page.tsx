@@ -13,18 +13,18 @@ import { MuscleKey, MUSCLE_META, HIGHLIGHTER_MAP, getMusclesForExercise, hexToRg
 ───────────────────────────────────────────────────────────── */
 function intensityOpacity(sets: number): number {
   if (sets === 0) return 0;
-  if (sets <= 2) return 0.28;
-  if (sets <= 5) return 0.52;
-  if (sets <= 9) return 0.76;
+  if (sets <= 4) return 0.28;
+  if (sets <= 9) return 0.52;
+  if (sets <= 19) return 0.76;
   return 1.0;
 }
 
 function intensityLabel(sets: number): string {
   if (sets === 0) return 'Rest';
-  if (sets <= 2) return 'Light';
-  if (sets <= 5) return 'Moderate';
-  if (sets <= 9) return 'High';
-  return 'Intense';
+  if (sets <= 4) return 'Maintenance';
+  if (sets <= 9) return 'Moderate';
+  if (sets <= 19) return 'Optimal';
+  return 'Overreaching';
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -302,7 +302,7 @@ export default function MusclesPage() {
                   <div className="muscles-diagram-wrap" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                     <Model
                       data={data}
-                      bodyColor={theme === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.12)'}
+                      bodyColor={theme === 'light' ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.12)'}
                       style={{ width: '80%', height: 'auto', margin: '0 auto' }}
                       svgStyle={{ overflow: 'visible' }}
                       highlightedColors={highlightedColors}
@@ -316,7 +316,7 @@ export default function MusclesPage() {
                   <div className="muscles-diagram-wrap" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                     <Model
                       data={data}
-                      bodyColor={theme === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.12)'}
+                      bodyColor={theme === 'light' ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.12)'}
                       style={{ width: '80%', height: 'auto', margin: '0 auto' }}
                       svgStyle={{ overflow: 'visible' }}
                       highlightedColors={highlightedColors}
@@ -337,12 +337,12 @@ export default function MusclesPage() {
               <div className="card muscles-legend">
                 <div className="muscles-legend-title">Intensity</div>
                 <div className="muscles-legend-row"><span className="muscles-legend-swatch" style={{ background: 'rgba(255,255,255,0.08)' }} />Rest</div>
-                <div className="muscles-legend-row"><span className="muscles-legend-swatch" style={{ background: 'rgba(0,245,255,0.28)' }} />Light (1–2 sets)</div>
-                <div className="muscles-legend-row"><span className="muscles-legend-swatch" style={{ background: 'rgba(0,245,255,0.55)' }} />Moderate (3–5)</div>
-                <div className="muscles-legend-row"><span className="muscles-legend-swatch" style={{ background: 'rgba(0,245,255,0.8)' }} />High (6–9)</div>
+                <div className="muscles-legend-row"><span className="muscles-legend-swatch" style={{ background: 'rgba(0,245,255,0.28)' }} />Maintenance (1–4 sets)</div>
+                <div className="muscles-legend-row"><span className="muscles-legend-swatch" style={{ background: 'rgba(0,245,255,0.52)' }} />Moderate (5–9)</div>
+                <div className="muscles-legend-row"><span className="muscles-legend-swatch" style={{ background: 'rgba(0,245,255,0.76)' }} />Optimal (10–19)</div>
                 <div className="muscles-legend-row">
                   <span className="muscles-legend-swatch" style={{ background: '#00f5ff', boxShadow: '0 0 6px #00f5ff' }} />
-                  Intense (10+)
+                  Overreaching (20+)
                 </div>
               </div>
 

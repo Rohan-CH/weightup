@@ -9,7 +9,7 @@ import { MuscleKey, MUSCLE_META, getMusclesForExercise } from '@/lib/muscle-util
 import UserProfileModal from '../UserProfileModal';
 import {
   TrendingUp, TrendingDown, Dumbbell, Calendar, Award, Flame,
-  ChevronRight, Plus, Trophy, Users, X, ArrowRight, BarChart2, Target,
+  ChevronRight, Plus, Trophy, Users, X, ArrowRight, BarChart2, Target, Activity
 } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -41,6 +41,8 @@ interface Stats {
   thisWeekLogs: number;
   lastWeekLogs: number;
   streak: number;
+  consistency30: number;
+  consistency30Days: string[];
 }
 
 interface RecentLog {
@@ -103,21 +105,6 @@ function Delta({ value }: { value: number }) {
   );
 }
 
-const getHeatmapGrid = () => {
-  const dates = [];
-  const now = new Date();
-  const startDate = new Date(now);
-  startDate.setDate(now.getDate() - 364);
-  const startDay = startDate.getDay();
-  startDate.setDate(startDate.getDate() - startDay);
-  
-  const cursor = new Date(startDate);
-  for (let i = 0; i < 371; i++) {
-    dates.push(new Date(cursor));
-    cursor.setDate(cursor.getDate() + 1);
-  }
-  return dates;
-};
 
 // Ripple effect hook
 function useRipple() {
@@ -155,7 +142,7 @@ function StatDrawer({ title, children, onClose }: { title: string; children: Rea
 
 export default function DashboardPage() {
   const [charts, setCharts] = useState<ExerciseChart[]>([]);
-  const [stats, setStats] = useState<Stats>({ totalLogs: 0, uniqueExercises: 0, bestLift: null, thisWeekLogs: 0, lastWeekLogs: 0, streak: 0 });
+  const [stats, setStats] = useState<Stats>({ totalLogs: 0, uniqueExercises: 0, bestLift: null, thisWeekLogs: 0, lastWeekLogs: 0, streak: 0, consistency30: 0, consistency30Days: [] });
   const [recentLogs, setRecentLogs] = useState<RecentLog[]>([]);
   const [profileModalUserId, setProfileModalUserId] = useState<string | null>(null);
   const [personalBests, setPersonalBests] = useState<PersonalBest[]>([]);
@@ -410,7 +397,15 @@ export default function DashboardPage() {
         }
       }
 
-      setStats({ totalLogs: logs.length, uniqueExercises, bestLift, thisWeekLogs, lastWeekLogs, streak });
+      const last30Days = Array.from({ length: 30 }, (_, i) => {
+        const d = new Date(today);
+        d.setDate(today.getDate() - (29 - i));
+        return dayStr(d);
+      });
+      const active30Days = last30Days.filter(d => activeDays.has(d)).length;
+      const consistency30 = Math.round((active30Days / 30) * 100);
+
+      setStats({ totalLogs: logs.length, uniqueExercises, bestLift, thisWeekLogs, lastWeekLogs, streak, consistency30, consistency30Days: last30Days.map(d => activeDays.has(d) ? 'active' : 'rest') });
       setCharts(chartData);
 
       // Rest & Recovery calculations
@@ -601,18 +596,6 @@ export default function DashboardPage() {
 
   const weekDelta = stats.thisWeekLogs - stats.lastWeekLogs;
 
-  const gridDates = getHeatmapGrid();
-  const monthLabels: { label: string; index: number }[] = [];
-  let prevMonth = -1;
-  gridDates.forEach((d, i) => {
-    if (i % 7 === 0) {
-      const month = d.getMonth();
-      if (month !== prevMonth) {
-        monthLabels.push({ label: d.toLocaleDateString(undefined, { month: 'short' }), index: Math.floor(i / 7) });
-        prevMonth = month;
-      }
-    }
-  });
 
   return (
     <div className="animate-fade-in-up">
@@ -741,7 +724,7 @@ export default function DashboardPage() {
         </button>
       </div>
 
-      {/* 📅 Consistency Heatmap Card */}
+      {/* 📅 30-Day Consistency Card */}
       <div className="card animate-fade-in-up" style={{
         marginBottom: 28,
         animationDelay: '0.21s',
@@ -755,112 +738,31 @@ export default function DashboardPage() {
         maxWidth: '100%',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-          <Calendar size={18} style={{ color: 'var(--accent-purple)' }} />
+          <Activity size={18} style={{ color: 'var(--accent-cyan)' }} />
           <div>
-            <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Consistency</h3>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>30-Day Consistency</h3>
+          </div>
+          <div style={{ marginLeft: 'auto', fontSize: 18, fontWeight: 800, color: 'var(--accent-cyan)' }}>
+            {stats.consistency30}%
           </div>
         </div>
 
-        <div style={{ width: '100%', overflowX: 'auto', paddingBottom: 8 }} className="no-scrollbar">
-          <div style={{ display: 'flex', gap: 8, minWidth: 720 }}>
-            {/* Day labels on the left */}
-            <div style={{
-              display: 'grid',
-              gridTemplateRows: 'repeat(7, 10px)',
-              gap: '3px',
-              padding: '18px 0 4px',
-              fontSize: 9,
-              color: 'var(--text-muted)',
-              textAlign: 'right',
-              lineHeight: '10px',
-              width: 24,
-              flexShrink: 0
-            }}>
-              <div></div>
-              <div>Mon</div>
-              <div></div>
-              <div>Wed</div>
-              <div></div>
-              <div>Fri</div>
-              <div></div>
-            </div>
-
-            {/* Month labels + grid on the right */}
-            <div style={{ flex: 1 }}>
-              {/* Month Labels */}
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(53, 10px)',
-                gap: '3px',
-                fontSize: 9,
-                color: 'var(--text-muted)',
-                marginBottom: 4
-              }}>
-                {Array.from({ length: 53 }).map((_, i) => {
-                  const labelObj = monthLabels.find(l => l.index === i);
-                  return (
-                    <div key={i} style={{ gridColumnStart: i + 1, gridColumnEnd: i + 3, gridRow: 1, whiteSpace: 'nowrap' }}>
-                      {labelObj ? labelObj.label : ''}
-                    </div>
-                  );
-                })}
-              </div>
-
-            {/* Heatmap Grid */}
-            <div style={{
-              display: 'grid',
-              gridTemplateRows: 'repeat(7, 10px)',
-              gridAutoFlow: 'column',
-              gap: '3px'
-            }}>
-              {gridDates.map((d, idx) => {
-                const dStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-                const count = dailyLogCounts[dStr] || 0;
-                const opacity = count === 0 ? 1 : count === 1 ? 0.35 : count === 2 ? 0.6 : count === 3 ? 0.8 : 1.0;
-                const color = 'var(--accent-purple)';
-                return (
-                  <div
-                    key={idx}
-                    onMouseEnter={(e) => {
-                      const rect = e.currentTarget.getBoundingClientRect();
-                      setHoveredDay({
-                        date: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }),
-                        count,
-                        x: rect.left + window.scrollX + rect.width / 2,
-                        y: rect.top + window.scrollY - 38
-                      });
-                    }}
-                    onMouseLeave={() => setHoveredDay(null)}
-                    style={{
-                      width: 10,
-                      height: 10,
-                      borderRadius: 2,
-                      background: count === 0
-                        ? (theme === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.04)')
-                        : color,
-                      opacity,
-                      boxShadow: count > 3 ? `0 0 6px ${color}` : 'none',
-                      cursor: 'pointer',
-                      transition: 'transform 0.1s ease, background-color 0.2s',
-                    }}
-                    className="heatmap-cell"
-                  />
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </div>
-
-        {/* Legend */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, marginTop: 12, fontSize: 10, color: 'var(--text-muted)' }}>
-          <span>Less</span>
-          <div style={{ width: 10, height: 10, borderRadius: 2, background: theme === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.04)' }} />
-          <div style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--accent-purple)', opacity: 0.35 }} />
-          <div style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--accent-purple)', opacity: 0.6 }} />
-          <div style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--accent-purple)', opacity: 0.8 }} />
-          <div style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--accent-purple)', opacity: 1.0, boxShadow: '0 0 4px var(--accent-purple)' }} />
-          <span>More</span>
+        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8, justifyContent: 'space-between' }} className="no-scrollbar">
+          {stats.consistency30Days.map((status, idx) => (
+            <div
+              key={idx}
+              title={status === 'active' ? 'Workout completed' : 'Rest day'}
+              style={{
+                width: 12,
+                height: 32,
+                flexShrink: 0,
+                borderRadius: 4,
+                background: status === 'active' ? 'var(--accent-cyan)' : (theme === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.04)'),
+                opacity: status === 'active' ? 1 : 0.6,
+                boxShadow: status === 'active' ? '0 0 8px rgba(0, 245, 255, 0.3)' : 'none',
+              }}
+            />
+          ))}
         </div>
       </div>
 
