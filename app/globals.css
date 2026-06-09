@@ -640,3 +640,26 @@ tbody tr:hover {
   }
 }
 
+/* ============ MUSCLE SVG ANIMATIONS ============ */
+.muscles-diagram-wrap {
+  animation: fadeInUp 0.8s ease-out forwards;
+}
+
+.muscles-diagrams svg {
+  animation: svgPulseGlow 3s infinite ease-in-out;
+  overflow: visible !important;
+}
+
+@keyframes svgPulseGlow {
+  0%, 100% { filter: drop-shadow(0 0 5px rgba(239, 68, 68, 0.15)); }
+  50% { filter: drop-shadow(0 0 18px rgba(239, 68, 68, 0.45)); }
+}
+
+.muscles-diagrams svg path {
+  transition: fill 0.3s ease-in-out, filter 0.3s ease-in-out !important;
+}
+
+.muscles-diagrams svg path:hover {
+  filter: brightness(1.25) drop-shadow(0 0 8px rgba(255, 255, 255, 0.3));
+  cursor: pointer;
+}
