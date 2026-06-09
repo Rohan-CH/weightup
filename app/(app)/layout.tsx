@@ -27,7 +27,6 @@ const navLinks = [
   { href: '/muscles', label: 'Muscles', icon: Zap },
   { href: '/splits', label: 'Splits', icon: Layers },
   { href: '/circles', label: 'Circles', icon: Users },
-  { href: '/leaderboard', label: 'Leaderboard', icon: Trophy },
   { href: '/profile', label: 'Profile', icon: User },
 ];
 
