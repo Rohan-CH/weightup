@@ -7,8 +7,9 @@ import { useRouter } from 'next/navigation';
 import { MuscleKey, MUSCLE_META } from '@/lib/muscle-utils';
 import {
   Layers, ChevronDown, ChevronUp, Plus, Dumbbell, Search,
-  RefreshCw, X, Trash2, Sparkles, Calendar, Users, ArrowRight,
+  RefreshCw, X, Trash2, Sparkles, Calendar, Users, ArrowRight, Pencil, MoreVertical, LayoutGrid, CheckCircle,
 } from 'lucide-react';
+import UserProfileModal from '../UserProfileModal';
 
 /* ─────────────────────────────────────────────────────────────
    TYPES
@@ -97,6 +98,8 @@ export default function SplitsPage() {
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   // Circle members on each split
   const [circleSplitMembers, setCircleSplitMembers] = useState<CircleMember[]>([]);
+
+  const [profileModalUserId, setProfileModalUserId] = useState<string | null>(null);
 
   // Exercise add UI
   const [addingToDayId, setAddingToDayId] = useState<string | null>(null);
@@ -442,9 +445,18 @@ export default function SplitsPage() {
     return (
       <div className="split-card-bubbles">
         {shown.map(m => (
-          <div key={m.user_id} className="split-card-bubble" title={m.username}>
+          <div 
+            key={m.user_id} 
+            className="split-card-bubble" 
+            title={m.username}
+            onClick={(e) => {
+              e.stopPropagation();
+              setProfileModalUserId(m.user_id);
+            }}
+            style={{ cursor: 'pointer' }}
+          >
             {m.avatar_url ? (
-              <img src={m.avatar_url} alt={m.username} />
+              <img src={m.avatar_url} alt={m.username} style={{ objectFit: 'cover' }} />
             ) : (
               m.username.charAt(0).toUpperCase()
             )}
@@ -722,6 +734,13 @@ export default function SplitsPage() {
           </div>,
           document.body
         )}
+
+        {profileModalUserId && (
+          <UserProfileModal 
+            userId={profileModalUserId} 
+            onClose={() => setProfileModalUserId(null)} 
+          />
+        )}
       </div>
     );
   }
@@ -960,6 +979,12 @@ export default function SplitsPage() {
             );
           })}
         </div>
+        {profileModalUserId && (
+          <UserProfileModal 
+            userId={profileModalUserId} 
+            onClose={() => setProfileModalUserId(null)} 
+          />
+        )}
       </div>
     );
   }

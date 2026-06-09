@@ -18,7 +18,9 @@ import {
   Pencil,
   Activity as ActivityIcon,
   Send,
+  Layers, ChevronDown, ChevronUp, Trophy, ArrowRight,
 } from 'lucide-react';
+import UserProfileModal from '../UserProfileModal';
 
 interface Circle {
   id: string;
@@ -120,6 +122,11 @@ function CirclesPageInner() {
   const [memberLogs, setMemberLogs] = useState<MemberLog[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
   const [memberRx, setMemberRx] = useState<Reaction[]>([]);
+
+  // Profile modal state
+  const [profileModalUserId, setProfileModalUserId] = useState<string | null>(null);
+
+  // Reaction picker
   const [pickerLog, setPickerLog] = useState<string | null>(null);
   const [pickerUp, setPickerUp] = useState(false);
 
@@ -641,13 +648,19 @@ function CirclesPageInner() {
         </button>
 
         <div className="page-header" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          {activeMember.avatar_url ? (
-            <img src={activeMember.avatar_url} alt="" className="avatar" style={{ width: 48, height: 48 }} />
-          ) : (
-            <div className="avatar-placeholder" style={{ width: 48, height: 48, fontSize: 18 }}>
-              {activeMember.username.charAt(0).toUpperCase()}
-            </div>
-          )}
+          <button 
+            type="button" 
+            style={{ padding: 0, margin: 0, border: 'none', background: 'transparent', cursor: 'pointer' }}
+            onClick={() => setProfileModalUserId(activeMember.user_id)}
+          >
+            {activeMember.avatar_url ? (
+              <img src={activeMember.avatar_url} alt="" className="avatar" style={{ width: 48, height: 48, objectFit: 'cover' }} />
+            ) : (
+              <div className="avatar-placeholder" style={{ width: 48, height: 48, fontSize: 18 }}>
+                {activeMember.username.charAt(0).toUpperCase()}
+              </div>
+            )}
+          </button>
           <div>
             <h1>{activeMember.username}</h1>
             <p>Workout history</p>
@@ -884,13 +897,19 @@ function CirclesPageInner() {
                     <tr key={m.user_id} style={{ cursor: 'pointer' }} onClick={() => openMember(m)}>
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                          {m.avatar_url ? (
-                            <img src={m.avatar_url} alt="" className="avatar" style={{ width: 32, height: 32 }} />
-                          ) : (
-                            <div className="avatar-placeholder" style={{ width: 32, height: 32, fontSize: 13 }}>
-                              {m.username.charAt(0).toUpperCase()}
-                            </div>
-                          )}
+                          <button 
+                            type="button" 
+                            style={{ padding: 0, margin: 0, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                            onClick={(e) => { e.stopPropagation(); setProfileModalUserId(m.user_id); }}
+                          >
+                            {m.avatar_url ? (
+                              <img src={m.avatar_url} alt="" className="avatar" style={{ width: 32, height: 32, objectFit: 'cover' }} />
+                            ) : (
+                              <div className="avatar-placeholder" style={{ width: 32, height: 32, fontSize: 13 }}>
+                                {m.username.charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                          </button>
                           <span style={{ fontWeight: 500 }}>{m.username}</span>
                         </div>
                       </td>
@@ -958,11 +977,11 @@ function CirclesPageInner() {
                           <button 
                             type="button" 
                             style={{ padding: 0, margin: 0, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                            onClick={() => openMember({ user_id: log.user_id, username: log.username, avatar_url: log.avatar_url, role: 'member' })}
+                            onClick={() => setProfileModalUserId(log.user_id)}
                             aria-label={`View ${log.username}'s profile`}
                           >
                             {log.avatar_url ? (
-                              <img src={log.avatar_url} alt="" className="avatar" style={{ width: 32, height: 32 }} />
+                              <img src={log.avatar_url} alt="" className="avatar" style={{ width: 32, height: 32, objectFit: 'cover' }} />
                             ) : (
                               <div className="avatar-placeholder" style={{ width: 32, height: 32, fontSize: 13 }}>
                                 {log.username.charAt(0).toUpperCase()}
@@ -1228,6 +1247,13 @@ function CirclesPageInner() {
             );
           })}
         </div>
+      )}
+
+      {profileModalUserId && (
+        <UserProfileModal 
+          userId={profileModalUserId} 
+          onClose={() => setProfileModalUserId(null)} 
+        />
       )}
     </div>
   );

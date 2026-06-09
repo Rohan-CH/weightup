@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Trophy, Crown, Medal, Award, Users } from 'lucide-react';
+import UserProfileModal from '../UserProfileModal';
 
 interface Exercise {
   id: string;
@@ -44,6 +45,7 @@ export default function LeaderboardPage() {
   const [powerlifterBoard, setPowerlifterBoard] = useState<PowerlifterEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [initLoading, setInitLoading] = useState(true);
+  const [profileModalUserId, setProfileModalUserId] = useState<string | null>(null);
   const supabase = createClient();
 
   useEffect(() => {
@@ -310,13 +312,19 @@ export default function LeaderboardPage() {
                           <td style={{ textAlign: 'center' }}>{getRankIcon(i)}</td>
                           <td>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                              {entry.avatar_url ? (
-                                <img src={entry.avatar_url} alt="" className="avatar" style={{ width: 32, height: 32 }} />
-                              ) : (
-                                <div className="avatar-placeholder" style={{ width: 32, height: 32, fontSize: 13 }}>
-                                  {entry.username.charAt(0).toUpperCase()}
-                                </div>
-                              )}
+                              <button 
+                                type="button" 
+                                style={{ padding: 0, margin: 0, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                onClick={() => setProfileModalUserId(entry.user_id)}
+                              >
+                                {entry.avatar_url ? (
+                                  <img src={entry.avatar_url} alt="" className="avatar" style={{ width: 32, height: 32, objectFit: 'cover' }} />
+                                ) : (
+                                  <div className="avatar-placeholder" style={{ width: 32, height: 32, fontSize: 13 }}>
+                                    {entry.username.charAt(0).toUpperCase()}
+                                  </div>
+                                )}
+                              </button>
                               <span style={{ fontWeight: 500 }}>{entry.username}</span>
                             </div>
                           </td>
@@ -369,13 +377,19 @@ export default function LeaderboardPage() {
                           <td style={{ textAlign: 'center' }}>{getRankIcon(i)}</td>
                           <td>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                              {entry.avatar_url ? (
-                                <img src={entry.avatar_url} alt="" className="avatar" style={{ width: 32, height: 32 }} />
-                              ) : (
-                                <div className="avatar-placeholder" style={{ width: 32, height: 32, fontSize: 13 }}>
-                                  {entry.username.charAt(0).toUpperCase()}
-                                </div>
-                              )}
+                              <button 
+                                type="button" 
+                                style={{ padding: 0, margin: 0, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                onClick={() => setProfileModalUserId(entry.user_id)}
+                              >
+                                {entry.avatar_url ? (
+                                  <img src={entry.avatar_url} alt="" className="avatar" style={{ width: 32, height: 32, objectFit: 'cover' }} />
+                                ) : (
+                                  <div className="avatar-placeholder" style={{ width: 32, height: 32, fontSize: 13 }}>
+                                    {entry.username.charAt(0).toUpperCase()}
+                                  </div>
+                                )}
+                              </button>
                               <span style={{ fontWeight: 500 }}>{entry.username}</span>
                             </div>
                           </td>
@@ -396,6 +410,13 @@ export default function LeaderboardPage() {
             </>
           )}
         </>
+      )}
+
+      {profileModalUserId && (
+        <UserProfileModal 
+          userId={profileModalUserId} 
+          onClose={() => setProfileModalUserId(null)} 
+        />
       )}
     </div>
   );

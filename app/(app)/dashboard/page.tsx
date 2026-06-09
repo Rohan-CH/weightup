@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { MuscleKey, MUSCLE_META, getMusclesForExercise } from '@/lib/muscle-utils';
+import UserProfileModal from '../UserProfileModal';
 import {
   TrendingUp, TrendingDown, Dumbbell, Calendar, Award, Flame,
   ChevronRight, Plus, Trophy, Users, X, ArrowRight, BarChart2, Target,
@@ -47,6 +48,7 @@ interface RecentLog {
   weight: number;
   username: string;
   avatar_url: string | null;
+  user_id: string;
   timeAgo: string;
 }
 
@@ -155,6 +157,7 @@ export default function DashboardPage() {
   const [charts, setCharts] = useState<ExerciseChart[]>([]);
   const [stats, setStats] = useState<Stats>({ totalLogs: 0, uniqueExercises: 0, bestLift: null, thisWeekLogs: 0, lastWeekLogs: 0, streak: 0 });
   const [recentLogs, setRecentLogs] = useState<RecentLog[]>([]);
+  const [profileModalUserId, setProfileModalUserId] = useState<string | null>(null);
   const [personalBests, setPersonalBests] = useState<PersonalBest[]>([]);
   const [leftMuscles, setLeftMuscles] = useState<MuscleKey[]>([]);
   const [hitCount, setHitCount] = useState(0);
@@ -242,6 +245,7 @@ export default function DashboardPage() {
               weight: g.weight_kg,
               username: profile.username || 'Unknown',
               avatar_url: profile.avatar_url || null,
+              user_id: g.user_id,
               timeAgo
             };
           });
@@ -1092,11 +1096,19 @@ export default function DashboardPage() {
               <div>
                 <h4 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 2px 0' }}>{log.exerciseName} <span style={{ color: 'var(--accent-cyan)' }}>• {log.weight}kg</span></h4>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)' }}>
-                  {log.avatar_url ? (
-                    <img src={log.avatar_url} alt="" style={{ width: 16, height: 16, borderRadius: '50%' }} />
-                  ) : (
-                    <div style={{ width: 16, height: 16, borderRadius: '50%', background: 'var(--accent-purple)', opacity: 0.2 }} />
-                  )}
+                  <button 
+                    type="button" 
+                    style={{ padding: 0, margin: 0, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    onClick={(e) => { e.stopPropagation(); setProfileModalUserId(log.user_id); }}
+                  >
+                    {log.avatar_url ? (
+                      <img src={log.avatar_url} alt="" style={{ width: 16, height: 16, borderRadius: '50%', objectFit: 'cover' }} />
+                    ) : (
+                      <div style={{ width: 16, height: 16, borderRadius: '50%', background: 'var(--accent-purple)', opacity: 0.5, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 10 }}>
+                        {log.username.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                  </button>
                   <span style={{ fontWeight: 600 }}>{log.username}</span>
                   <span>•</span>
                   <span>{log.timeAgo}</span>
@@ -1538,6 +1550,13 @@ export default function DashboardPage() {
           </div>
         </div>,
         document.body
+      )}
+
+      {profileModalUserId && (
+        <UserProfileModal 
+          userId={profileModalUserId} 
+          onClose={() => setProfileModalUserId(null)} 
+        />
       )}
     </div>
   );
