@@ -40,8 +40,19 @@ const CHART_COLORS = ['#00f5ff', '#7c3aed', '#ec4899', '#10b981', '#f59e0b'];
 export default function LogWorkoutPage() {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [filteredExercises, setFilteredExercises] = useState<Exercise[]>([]);
-  const [selectedExercise, setSelectedExercise] = useState('');
-  const [sets, setSets] = useState([{ weight: '', reps: '' }]);
+  interface SessionExercise {
+    blockId: string;
+    exerciseId: string;
+    searchTerm: string;
+    sets: { weight: string; reps: string }[];
+  }
+
+  const [sessionExercises, setSessionExercises] = useState<SessionExercise[]>([
+    { blockId: 'init-block', exerciseId: '', searchTerm: '', sets: [{ weight: '', reps: '' }] }
+  ]);
+  const [activeDropdownBlockId, setActiveDropdownBlockId] = useState<string | null>(null);
+  const [activeNewExerciseBlockId, setActiveNewExerciseBlockId] = useState<string | null>(null);
+
   const [restTimer, setRestTimer] = useState(0);
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [logs, setLogs] = useState<WorkoutLog[]>([]);
@@ -49,11 +60,9 @@ export default function LogWorkoutPage() {
   const [logLoading, setLogLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [showDropdown, setShowDropdown] = useState(false);
+  
   const [newExerciseName, setNewExerciseName] = useState('');
   const [newExerciseMuscles, setNewExerciseMuscles] = useState<MuscleKey[]>([]);
-  const [showNewExercise, setShowNewExercise] = useState(false);
   const [visibleLogsCount, setVisibleLogsCount] = useState(10);
   // emoji reactions left by circle members, keyed by log id
   const [reactions, setReactions] = useState<Record<string, { emoji: string; count: number }[]>>({});
@@ -241,8 +250,14 @@ export default function LogWorkoutPage() {
         name: d.exercise_name,
       }));
       setSplitQueue(queue);
-      setSelectedExercise(queue[0].id);
-      setSearchTerm(queue[0].name);
+      
+      const newSession = data.map((d: any, idx: number) => ({
+        blockId: 'split-block-' + idx,
+        exerciseId: d.exercise_id,
+        searchTerm: d.exercise_name,
+        sets: [{ weight: '', reps: '' }]
+      }));
+      setSessionExercises(newSession);
     }
   };
 
@@ -257,15 +272,20 @@ export default function LogWorkoutPage() {
   }, [restTimer]);
 
   useEffect(() => {
-    if (searchTerm) {
-      const filtered = exercises.filter(e =>
-        e.name.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-      setFilteredExercises(filtered);
+    if (activeDropdownBlockId) {
+      const activeBlock = sessionExercises.find(s => s.blockId === activeDropdownBlockId);
+      if (activeBlock && activeBlock.searchTerm) {
+        const filtered = exercises.filter(e =>
+          e.name.toLowerCase().includes(activeBlock.searchTerm.toLowerCase())
+        );
+        setFilteredExercises(filtered);
+      } else {
+        setFilteredExercises(exercises);
+      }
     } else {
       setFilteredExercises(exercises);
     }
-  }, [searchTerm, exercises]);
+  }, [activeDropdownBlockId, sessionExercises, exercises]);
 
 
   const handleAddExercise = async () => {
@@ -291,12 +311,17 @@ export default function LogWorkoutPage() {
 
     if (data) {
       setExercises([...exercises, data]);
-      setSelectedExercise(data.id);
-      setSearchTerm(data.name);
-      setShowNewExercise(false);
+      if (activeNewExerciseBlockId) {
+        setSessionExercises(prev => prev.map(block => 
+          block.blockId === activeNewExerciseBlockId 
+            ? { ...block, exerciseId: data.id, searchTerm: data.name }
+            : block
+        ));
+      }
+      setActiveNewExerciseBlockId(null);
       setNewExerciseName('');
       setNewExerciseMuscles([]);
-      setShowDropdown(false);
+      setActiveDropdownBlockId(null);
     }
   };
 
@@ -305,10 +330,24 @@ export default function LogWorkoutPage() {
     setError('');
     setSuccess('');
 
-    const validSets = sets.filter(s => s.weight.trim() !== '' && s.reps.trim() !== '');
+    const allValidSets: any[] = [];
+    let hasSelectedExercise = false;
 
-    if (!selectedExercise || validSets.length === 0) {
-      setError('Please select an exercise and fill at least one valid set');
+    sessionExercises.forEach(block => {
+      if (block.exerciseId) hasSelectedExercise = true;
+      const validSets = block.sets.filter(s => s.weight.trim() !== '' && s.reps.trim() !== '');
+      validSets.forEach(s => {
+        allValidSets.push({
+          exercise_id: block.exerciseId,
+          weight_kg: parseFloat(s.weight),
+          reps: parseInt(s.reps),
+          logged_at: date,
+        });
+      });
+    });
+
+    if (!hasSelectedExercise || allValidSets.length === 0) {
+      setError('Please select at least one exercise and fill at least one valid set');
       return;
     }
 
@@ -316,28 +355,23 @@ export default function LogWorkoutPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const payload = validSets.map(s => ({
-      user_id: user.id,
-      exercise_id: selectedExercise,
-      weight_kg: parseFloat(s.weight),
-      reps: parseInt(s.reps),
-      logged_at: date,
-    }));
+    const payload = allValidSets.map(s => ({ ...s, user_id: user.id }));
 
     const { error } = await supabase.from('workout_logs').insert(payload);
 
     if (error) {
       setError(error.message);
     } else {
-      setSuccess(`Logged ${validSets.length} set(s)!`);
+      setSuccess(`Logged ${allValidSets.length} set(s) across ${sessionExercises.filter(b => b.sets.some(s => s.weight.trim() !== '' && s.reps.trim() !== '')).length} exercises!`);
       
-      // Keep one empty set, or carry over last weight
-      const lastSet = validSets[validSets.length - 1];
-      setSets([{ weight: lastSet ? lastSet.weight : '', reps: '' }]);
+      // Reset session to empty
+      setSessionExercises([{ blockId: Math.random().toString(), exerciseId: '', searchTerm: '', sets: [{ weight: '', reps: '' }] }]);
       
-      // Start 90s rest timer
+      // Clear split banner if active
+      setSplitQueue([]);
+      setSplitDayName('');
+      
       setRestTimer(90);
-      
       fetchLogs();
       setTimeout(() => setSuccess(''), 3000);
     }
@@ -351,10 +385,13 @@ export default function LogWorkoutPage() {
     }
   };
 
-  const selectExercise = (ex: Exercise) => {
-    setSelectedExercise(ex.id);
-    setSearchTerm(ex.name);
-    setShowDropdown(false);
+  const selectExercise = (ex: Exercise, blockId: string) => {
+    setSessionExercises(prev => prev.map(block => 
+      block.blockId === blockId 
+        ? { ...block, exerciseId: ex.id, searchTerm: ex.name }
+        : block
+    ));
+    setActiveDropdownBlockId(null);
   };
 
   const displayedLogs = logs.slice(0, visibleLogsCount);
@@ -407,19 +444,16 @@ export default function LogWorkoutPage() {
               {splitDayName || 'Loading...'}
             </div>
           </div>
-          {splitQueue.length > 1 ? (
+          {splitQueue.length > 0 ? (
             <button
               className="btn-primary"
               style={{ fontSize: 12, padding: '6px 12px', minHeight: 0, gap: 4, background: 'linear-gradient(135deg, var(--accent-purple), #9333ea)' }}
               onClick={() => {
-                const nextQueue = splitQueue.slice(1);
-                setSplitQueue(nextQueue);
-                setSelectedExercise(nextQueue[0].id);
-                setSearchTerm(nextQueue[0].name);
+                setSplitQueue([]);
+                setSplitDayName('');
               }}
             >
-              Next Exercise
-              <ArrowRight size={14} />
+              Clear Split
             </button>
           ) : (
             <button
@@ -437,267 +471,307 @@ export default function LogWorkoutPage() {
       )}
 
       {/* Log Form */}
-      <div className="card" style={{ marginBottom: 32, maxWidth: 600, position: 'relative', zIndex: showDropdown ? 60 : 'auto' }}>
-        <form onSubmit={handleSubmit}>
-          <div className="form-group" style={{ position: 'relative' }}>
-            <label className="label">Exercise</label>
-            <div style={{ position: 'relative' }}>
-              <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-              <input
-                className="input"
-                style={{ paddingLeft: 36 }}
-                placeholder="Search exercises..."
-                value={searchTerm}
-                onChange={(e) => {
-                  setSearchTerm(e.target.value);
-                  setShowDropdown(true);
-                  setSelectedExercise('');
-                }}
-                onFocus={() => setShowDropdown(true)}
-              />
+      <form onSubmit={handleSubmit} style={{ marginBottom: 32, maxWidth: 600 }}>
+        
+        {/* Auto-Regulation Warning (Aggregated) */}
+        {(() => {
+          const selectedExIds = sessionExercises.map(b => b.exerciseId).filter(Boolean);
+          const selectedExDetails = exercises.filter(e => selectedExIds.includes(e.id));
+          const allTargetMuscles = new Set<string>();
+          selectedExDetails.forEach(ex => {
+            getMusclesForExercise(ex.name, ex.target_muscles).forEach(m => allTargetMuscles.add(m));
+          });
+          
+          const fatiguedMuscles = Array.from(allTargetMuscles).filter(m => (fatigueScores[m] || 0) > 80);
+          
+          if (fatiguedMuscles.length > 0) {
+            const labels = fatiguedMuscles.map(m => MUSCLE_META[m as MuscleKey].label).join(', ');
+            return (
+              <div style={{ padding: 12, marginBottom: 16, background: 'rgba(239, 68, 68, 0.1)', border: '1px solid #ef4444', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ fontSize: 20 }}>⚠️</span>
+                <div style={{ fontSize: 13, color: '#ef4444', lineHeight: 1.4 }}>
+                  <strong style={{ display: 'block', marginBottom: 2 }}>High Muscle Fatigue Detected</strong>
+                  Your {labels} {fatiguedMuscles.length > 1 ? 'are' : 'is'} over 80% fatigued. Consider resting or training a different muscle group today.
+                </div>
+              </div>
+            );
+          }
+          return null;
+        })()}
+
+        {/* Rest Timer */}
+        {restTimer > 0 && (
+          <div style={{ padding: 12, marginBottom: 16, background: 'rgba(0,245,255,0.1)', border: '1px solid var(--accent-cyan)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            <span style={{ fontSize: 18 }}>⏱️</span>
+            <span style={{ color: 'var(--accent-cyan)', fontWeight: 700, fontSize: 16 }}>Rest Timer: {Math.floor(restTimer / 60)}:{(restTimer % 60).toString().padStart(2, '0')}</span>
+            <button type="button" onClick={() => setRestTimer(0)} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', marginLeft: 'auto' }}><X size={16}/></button>
+          </div>
+        )}
+
+        {sessionExercises.map((block, bIdx) => (
+          <div key={block.blockId} className="card" style={{ marginBottom: 16, position: 'relative', zIndex: activeDropdownBlockId === block.blockId ? 60 : (50 - bIdx) }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+               <label className="label" style={{ margin: 0 }}>Exercise {bIdx + 1}</label>
+               {sessionExercises.length > 1 && (
+                 <button type="button" onClick={() => setSessionExercises(prev => prev.filter(b => b.blockId !== block.blockId))} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
+                   <Trash2 size={14} />
+                 </button>
+               )}
             </div>
-            {showDropdown && (
-              <div style={{
-                position: 'absolute',
-                top: '100%',
-                left: 0,
-                right: 0,
-                background: 'var(--bg-secondary)',
-                border: '1px solid var(--border-color)',
-                borderRadius: 'var(--radius-md)',
-                maxHeight: 200,
-                overflowY: 'auto',
-                zIndex: 50,
-                marginTop: 4,
-              }}>
-                {filteredExercises.map(ex => (
+
+            <div className="form-group" style={{ position: 'relative' }}>
+              <div style={{ position: 'relative' }}>
+                <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                <input
+                  className="input"
+                  style={{ paddingLeft: 36 }}
+                  placeholder="Search exercises..."
+                  value={block.searchTerm}
+                  onChange={(e) => {
+                    setSessionExercises(prev => prev.map(b => b.blockId === block.blockId ? { ...b, searchTerm: e.target.value, exerciseId: '' } : b));
+                    setActiveDropdownBlockId(block.blockId);
+                  }}
+                  onFocus={() => setActiveDropdownBlockId(block.blockId)}
+                />
+              </div>
+              {activeDropdownBlockId === block.blockId && (
+                <div style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  right: 0,
+                  background: 'var(--bg-secondary)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: 'var(--radius-md)',
+                  maxHeight: 200,
+                  overflowY: 'auto',
+                  zIndex: 50,
+                  marginTop: 4,
+                }}>
+                  {filteredExercises.map(ex => (
+                    <div
+                      key={ex.id}
+                      onClick={() => selectExercise(ex, block.blockId)}
+                      style={{
+                        padding: '10px 16px',
+                        cursor: 'pointer',
+                        fontSize: 14,
+                        borderBottom: '1px solid var(--border-color)',
+                        transition: 'background 0.15s',
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-input)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      {ex.name}
+                    </div>
+                  ))}
+                  {filteredExercises.length === 0 && (
+                    <div style={{ padding: '12px 16px', color: 'var(--text-muted)', fontSize: 14 }}>
+                      No exercises found
+                    </div>
+                  )}
                   <div
-                    key={ex.id}
-                    onClick={() => selectExercise(ex)}
+                    onClick={() => { setActiveNewExerciseBlockId(block.blockId); setActiveDropdownBlockId(null); }}
                     style={{
                       padding: '10px 16px',
                       cursor: 'pointer',
                       fontSize: 14,
-                      borderBottom: '1px solid var(--border-color)',
-                      transition: 'background 0.15s',
+                      color: 'var(--accent-cyan)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
                     }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-input)')}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(0,245,255,0.04)')}
                     onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                   >
-                    {ex.name}
+                    <Plus size={14} /> Add new exercise
                   </div>
-                ))}
-                {filteredExercises.length === 0 && (
-                  <div style={{ padding: '12px 16px', color: 'var(--text-muted)', fontSize: 14 }}>
-                    No exercises found
+                </div>
+              )}
+            </div>
+
+            {activeNewExerciseBlockId === block.blockId && (
+              <div style={{
+                border: '1px solid rgba(0, 245, 255, 0.15)',
+                background: 'rgba(255, 255, 255, 0.02)',
+                padding: 16,
+                marginBottom: 16,
+                borderRadius: 'var(--radius-md)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 12
+              }}>
+                <h4 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Plus size={16} style={{ color: 'var(--accent-cyan)' }} />
+                  Create Custom Exercise
+                </h4>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="label" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Exercise Name</label>
+                  <input
+                    className="input"
+                    placeholder="e.g. Incline DB Hammer Press"
+                    value={newExerciseName}
+                    onChange={(e) => setNewExerciseName(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="label" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Target Muscles (Select all that apply)</label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 150, overflowY: 'auto', padding: '2px 0' }}>
+                    {(Object.keys(MUSCLE_META) as MuscleKey[]).map(key => {
+                      const selected = newExerciseMuscles.includes(key);
+                      const meta = MUSCLE_META[key];
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => {
+                            setNewExerciseMuscles(prev =>
+                              prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+                            );
+                          }}
+                          style={{
+                            padding: '6px 12px',
+                            borderRadius: 20,
+                            fontSize: 12,
+                            fontWeight: 500,
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease',
+                            background: selected ? `${meta.color}20` : 'rgba(255,255,255,0.03)',
+                            color: selected ? meta.color : 'var(--text-muted)',
+                            border: `1px solid ${selected ? meta.color : 'rgba(255,255,255,0.08)'}`,
+                            boxShadow: selected ? `0 0 6px ${meta.color}15` : 'none',
+                          }}
+                        >
+                          {meta.label}
+                        </button>
+                      );
+                    })}
                   </div>
-                )}
-                <div
-                  onClick={() => { setShowNewExercise(true); setShowDropdown(false); }}
-                  style={{
-                    padding: '10px 16px',
-                    cursor: 'pointer',
-                    fontSize: 14,
-                    color: 'var(--accent-cyan)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(0,245,255,0.04)')}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                >
-                  <Plus size={14} /> Add new exercise
+                </div>
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => {
+                      setActiveNewExerciseBlockId(null);
+                      setNewExerciseName('');
+                      setNewExerciseMuscles([]);
+                    }}
+                    style={{ padding: '6px 12px', fontSize: 12, height: 'auto', minHeight: 0 }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    onClick={handleAddExercise}
+                    disabled={!newExerciseName.trim()}
+                    style={{ padding: '6px 12px', fontSize: 12, height: 'auto', minHeight: 0, gap: 4 }}
+                  >
+                    <Plus size={14} /> Add Exercise
+                  </button>
                 </div>
               </div>
             )}
-          </div>
 
-          {showNewExercise && (
-            <div style={{
-              border: '1px solid rgba(0, 245, 255, 0.15)',
-              background: 'rgba(255, 255, 255, 0.02)',
-              padding: 16,
-              marginBottom: 16,
-              borderRadius: 'var(--radius-md)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 12
-            }}>
-              <h4 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Plus size={16} style={{ color: 'var(--accent-cyan)' }} />
-                Create Custom Exercise
-              </h4>
-              <div className="form-group" style={{ margin: 0 }}>
-                <label className="label" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Exercise Name</label>
-                <input
-                  className="input"
-                  placeholder="e.g. Incline DB Hammer Press"
-                  value={newExerciseName}
-                  onChange={(e) => setNewExerciseName(e.target.value)}
-                  autoFocus
-                />
+            {/* Set Grid for this block */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '40px 1fr 1fr 40px', gap: 8, color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, padding: '0 4px' }}>
+                <div style={{ textAlign: 'center' }}>SET</div>
+                <div>KG</div>
+                <div>REPS</div>
+                <div></div>
               </div>
-              <div className="form-group" style={{ margin: 0 }}>
-                <label className="label" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Target Muscles (Select all that apply)</label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 150, overflowY: 'auto', padding: '2px 0' }}>
-                  {(Object.keys(MUSCLE_META) as MuscleKey[]).map(key => {
-                    const selected = newExerciseMuscles.includes(key);
-                    const meta = MUSCLE_META[key];
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        onClick={() => {
-                          setNewExerciseMuscles(prev =>
-                            prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
-                          );
-                        }}
-                        style={{
-                          padding: '6px 12px',
-                          borderRadius: 20,
-                          fontSize: 12,
-                          fontWeight: 500,
-                          cursor: 'pointer',
-                          transition: 'all 0.15s ease',
-                          background: selected ? `${meta.color}20` : 'rgba(255,255,255,0.03)',
-                          color: selected ? meta.color : 'var(--text-muted)',
-                          border: `1px solid ${selected ? meta.color : 'rgba(255,255,255,0.08)'}`,
-                          boxShadow: selected ? `0 0 6px ${meta.color}15` : 'none',
-                        }}
-                      >
-                        {meta.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() => {
-                    setShowNewExercise(false);
-                    setNewExerciseName('');
-                    setNewExerciseMuscles([]);
-                  }}
-                  style={{ padding: '6px 12px', fontSize: 12, height: 'auto', minHeight: 0 }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="btn-primary"
-                  onClick={handleAddExercise}
-                  disabled={!newExerciseName.trim()}
-                  style={{ padding: '6px 12px', fontSize: 12, height: 'auto', minHeight: 0, gap: 4 }}
-                >
-                  <Plus size={14} /> Add Exercise
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Auto-Regulation Warning */}
-          {(() => {
-            const selectedExDetails = exercises.find(e => e.id === selectedExercise);
-            if (!selectedExDetails) return null;
-            const targetMuscles = getMusclesForExercise(selectedExDetails.name, selectedExDetails.target_muscles);
-            const fatiguedMuscles = targetMuscles.filter(m => (fatigueScores[m] || 0) > 80);
-            
-            if (fatiguedMuscles.length > 0) {
-              const labels = fatiguedMuscles.map(m => MUSCLE_META[m as MuscleKey].label).join(', ');
-              return (
-                <div style={{ padding: 12, marginBottom: 16, background: 'rgba(239, 68, 68, 0.1)', border: '1px solid #ef4444', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <span style={{ fontSize: 20 }}>⚠️</span>
-                  <div style={{ fontSize: 13, color: '#ef4444', lineHeight: 1.4 }}>
-                    <strong style={{ display: 'block', marginBottom: 2 }}>High Muscle Fatigue Detected</strong>
-                    Your {labels} {fatiguedMuscles.length > 1 ? 'are' : 'is'} over 80% fatigued. Consider resting or training a different muscle group today.
+              
+              {block.sets.map((s, idx) => (
+                <div key={idx} style={{ display: 'grid', gridTemplateColumns: '40px 1fr 1fr 40px', gap: 8, alignItems: 'center' }}>
+                  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', fontWeight: 600, background: 'rgba(255,255,255,0.03)', height: '40px', borderRadius: 4 }}>
+                    {idx + 1}
                   </div>
+                  <input
+                    className="input"
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    placeholder="0"
+                    value={s.weight}
+                    onChange={(e) => {
+                      setSessionExercises(prev => prev.map(b => {
+                        if (b.blockId !== block.blockId) return b;
+                        const newSets = [...b.sets];
+                        newSets[idx].weight = e.target.value;
+                        return { ...b, sets: newSets };
+                      }));
+                    }}
+                    style={{ height: '40px', padding: '0 12px' }}
+                  />
+                  <input
+                    className="input"
+                    type="number"
+                    min="1"
+                    placeholder="0"
+                    value={s.reps}
+                    onChange={(e) => {
+                      setSessionExercises(prev => prev.map(b => {
+                        if (b.blockId !== block.blockId) return b;
+                        const newSets = [...b.sets];
+                        newSets[idx].reps = e.target.value;
+                        return { ...b, sets: newSets };
+                      }));
+                    }}
+                    style={{ height: '40px', padding: '0 12px' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSessionExercises(prev => prev.map(b => {
+                        if (b.blockId !== block.blockId) return b;
+                        if (b.sets.length > 1) {
+                          return { ...b, sets: b.sets.filter((_, i) => i !== idx) };
+                        } else {
+                          return { ...b, sets: [{ weight: '', reps: '' }] };
+                        }
+                      }));
+                    }}
+                    style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', height: '40px' }}
+                  >
+                    <Trash2 size={16} />
+                  </button>
                 </div>
-              );
-            }
-            return null;
-          })()}
-
-          {/* Rest Timer */}
-          {restTimer > 0 && (
-            <div style={{ padding: 12, marginBottom: 16, background: 'rgba(0,245,255,0.1)', border: '1px solid var(--accent-cyan)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-              <span style={{ fontSize: 18 }}>⏱️</span>
-              <span style={{ color: 'var(--accent-cyan)', fontWeight: 700, fontSize: 16 }}>Rest Timer: {Math.floor(restTimer / 60)}:{(restTimer % 60).toString().padStart(2, '0')}</span>
-              <button type="button" onClick={() => setRestTimer(0)} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', marginLeft: 'auto' }}><X size={16}/></button>
+              ))}
+              
+              <button
+                type="button"
+                onClick={() => {
+                  setSessionExercises(prev => prev.map(b => {
+                    if (b.blockId !== block.blockId) return b;
+                    const lastSet = b.sets[b.sets.length - 1];
+                    return { ...b, sets: [...b.sets, { weight: lastSet ? lastSet.weight : '', reps: '' }] };
+                  }));
+                }}
+                style={{ padding: 8, background: 'rgba(255,255,255,0.03)', border: '1px dashed rgba(255,255,255,0.1)', borderRadius: 4, color: 'var(--text-primary)', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 4, transition: 'background 0.2s' }}
+              >
+                <Plus size={14} /> Add Set
+              </button>
             </div>
-          )}
-
-          {/* Set Grid */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '40px 1fr 1fr 40px', gap: 8, color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, padding: '0 4px' }}>
-              <div style={{ textAlign: 'center' }}>SET</div>
-              <div>KG</div>
-              <div>REPS</div>
-              <div></div>
-            </div>
-            
-            {sets.map((s, idx) => (
-              <div key={idx} style={{ display: 'grid', gridTemplateColumns: '40px 1fr 1fr 40px', gap: 8, alignItems: 'center' }}>
-                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', fontWeight: 600, background: 'rgba(255,255,255,0.03)', height: '40px', borderRadius: 4 }}>
-                  {idx + 1}
-                </div>
-                <input
-                  className="input"
-                  type="number"
-                  step="0.5"
-                  min="0"
-                  placeholder="0"
-                  value={s.weight}
-                  onChange={(e) => {
-                    const newSets = [...sets];
-                    newSets[idx].weight = e.target.value;
-                    setSets(newSets);
-                  }}
-                  style={{ height: '40px', padding: '0 12px' }}
-                />
-                <input
-                  className="input"
-                  type="number"
-                  min="1"
-                  placeholder="0"
-                  value={s.reps}
-                  onChange={(e) => {
-                    const newSets = [...sets];
-                    newSets[idx].reps = e.target.value;
-                    setSets(newSets);
-                  }}
-                  style={{ height: '40px', padding: '0 12px' }}
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (sets.length > 1) {
-                      setSets(sets.filter((_, i) => i !== idx));
-                    } else {
-                      setSets([{ weight: '', reps: '' }]);
-                    }
-                  }}
-                  style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', height: '40px' }}
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            ))}
-            
-            <button
-              type="button"
-              onClick={() => {
-                const lastSet = sets[sets.length - 1];
-                setSets([...sets, { weight: lastSet ? lastSet.weight : '', reps: '' }]);
-              }}
-              style={{ padding: 8, background: 'rgba(255,255,255,0.03)', border: '1px dashed rgba(255,255,255,0.1)', borderRadius: 4, color: 'var(--text-primary)', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 4, transition: 'background 0.2s' }}
-            >
-              <Plus size={14} /> Add Set
-            </button>
           </div>
+        ))}
 
-          <div className="form-group" style={{ maxWidth: 200 }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 24 }}>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => {
+              setSessionExercises(prev => [...prev, { blockId: Math.random().toString(), exerciseId: '', searchTerm: '', sets: [{ weight: '', reps: '' }] }]);
+            }}
+          >
+            <Plus size={16} /> Add Another Exercise
+          </button>
+        </div>
+
+        <div className="card" style={{ marginBottom: 32, padding: 24 }}>
+          <div className="form-group" style={{ maxWidth: 200, marginBottom: 20 }}>
             <label className="label">Date</label>
             <input
               className="input"
@@ -710,98 +784,18 @@ export default function LogWorkoutPage() {
           {error && <p className="error-text" style={{ marginBottom: 12 }}>{error}</p>}
           {success && <p className="success-text" style={{ marginBottom: 12 }}>{success}</p>}
 
-          <button type="submit" className="btn-primary" disabled={loading}>
-            {loading ? <span className="spinner" /> : <><Dumbbell size={16} /> Log Workout</>}
+          <button type="submit" className="btn-primary" disabled={loading} style={{ width: '100%' }}>
+            {loading ? <span className="spinner" /> : <><Dumbbell size={16} /> Finish & Log Workout</>}
           </button>
-        </form>
-      </div>
-
-      {chartsData.length > 0 && (
-        <div style={{ marginBottom: 32 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
-            <h2 style={{ fontSize: 20, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <TrendingUp size={20} style={{ color: 'var(--accent-cyan)' }} />
-              Progress Charts
-            </h2>
-            <div style={{ position: 'relative', minWidth: 220 }}>
-              <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-              <input
-                className="input"
-                style={{ paddingLeft: 36 }}
-                placeholder="Search exercises..."
-                value={chartSearch}
-                onChange={(e) => { setChartSearch(e.target.value); setVisibleChartsCount(4); }}
-              />
-            </div>
-          </div>
-
-          {filteredCharts.length === 0 ? (
-            <div className="card empty-state">
-              <Search size={48} />
-              <h3>No matching exercises</h3>
-              <p>No logged exercises match &ldquo;{chartSearch}&rdquo;.</p>
-            </div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 440px), 1fr))', gap: 20 }}>
-              {visibleCharts.map((chart, i) => (
-                <div key={chart.exerciseId} className="card">
-                  <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: CHART_COLORS[i % CHART_COLORS.length], display: 'inline-block' }} />
-                    {chart.exerciseName}
-                  </h3>
-                  <ResponsiveContainer width="100%" height={220}>
-                    <LineChart data={chart.data}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-                      <XAxis
-                        dataKey="date"
-                        tick={{ fill: '#55556a', fontSize: 11 }}
-                        axisLine={{ stroke: 'rgba(255,255,255,0.06)' }}
-                        tickLine={false}
-                        tickFormatter={(v) => {
-                          const d = new Date(v);
-                          return `${d.getDate()}/${d.getMonth() + 1}`;
-                        }}
-                      />
-                      <YAxis
-                        tick={{ fill: '#55556a', fontSize: 11 }}
-                        axisLine={{ stroke: 'rgba(255,255,255,0.06)' }}
-                        tickLine={false}
-                        unit="kg"
-                      />
-                      <Tooltip content={<CustomTooltip />} />
-                      <Line
-                        type="monotone"
-                        dataKey="weight"
-                        stroke={CHART_COLORS[i % CHART_COLORS.length]}
-                        strokeWidth={2}
-                        dot={{ r: 3, fill: CHART_COLORS[i % CHART_COLORS.length] }}
-                        activeDot={{ r: 5, stroke: CHART_COLORS[i % CHART_COLORS.length], strokeWidth: 2 }}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {filteredCharts.length > visibleChartsCount && (
-            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 24 }}>
-              <button
-                type="button"
-                onClick={() => setVisibleChartsCount(prev => prev + 4)}
-                style={{
-                  padding: '10px 24px', fontSize: 14, borderRadius: 'var(--radius-full)',
-                  background: 'var(--bg-input)', border: '1px solid var(--border-color)',
-                  color: 'var(--text-primary)', cursor: 'pointer', transition: 'all 0.2s',
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-card-hover)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-input)'; }}
-              >
-                Show More Charts ({filteredCharts.length - visibleChartsCount} more)
-              </button>
-            </div>
-          )}
         </div>
+      </form>
+
+      {/* Click-away handler for dropdowns */}
+      {activeDropdownBlockId && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 40 }}
+          onClick={() => setActiveDropdownBlockId(null)}
+        />
       )}
 
       {/* Recent Logs */}
@@ -915,13 +909,7 @@ export default function LogWorkoutPage() {
         </div>
       )}
 
-      {/* Click-away handler */}
-      {showDropdown && (
-        <div
-          style={{ position: 'fixed', inset: 0, zIndex: 40 }}
-          onClick={() => setShowDropdown(false)}
-        />
-      )}
+
     </div>
   );
 }
