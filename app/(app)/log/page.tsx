@@ -597,27 +597,7 @@ export default function LogWorkoutPage() {
             </div>
           )}
 
-          {/* Auto-Regulation Warning */}
-          {(() => {
-            const selectedExDetails = exercises.find(e => e.id === selectedExercise);
-            if (!selectedExDetails) return null;
-            const targetMuscles = getMusclesForExercise(selectedExDetails.name, selectedExDetails.target_muscles);
-            const fatiguedMuscles = targetMuscles.filter(m => (fatigueScores[m] || 0) > 80);
-            
-            if (fatiguedMuscles.length > 0) {
-              const labels = fatiguedMuscles.map(m => MUSCLE_META[m as MuscleKey].label).join(', ');
-              return (
-                <div style={{ padding: 12, marginBottom: 16, background: 'rgba(239, 68, 68, 0.1)', border: '1px solid #ef4444', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <span style={{ fontSize: 20 }}>⚠️</span>
-                  <div style={{ fontSize: 13, color: '#ef4444', lineHeight: 1.4 }}>
-                    <strong style={{ display: 'block', marginBottom: 2 }}>High Muscle Fatigue Detected</strong>
-                    Your {labels} {fatiguedMuscles.length > 1 ? 'are' : 'is'} over 80% fatigued. Consider resting or training a different muscle group today.
-                  </div>
-                </div>
-              );
-            }
-            return null;
-          })()}
+          {/* Auto-Regulation Warning removed due to inaccuracy during active workouts */}
 
           {/* Rest Timer */}
           {restTimer > 0 && (
