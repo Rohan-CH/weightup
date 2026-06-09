@@ -251,15 +251,24 @@ export default function MusclesPage() {
               // to avoid frequency accumulation when multiple MuscleKeys share a slug
               const slugColor: Record<string, string> = {};
               const slugName: Record<string, MuscleKey> = {};
+
+              // Helper to determine color based on fatigue/sets
+              const getFatigueColor = (score: number, isSelected: boolean) => {
+                if (isSelected) return 'rgba(124, 58, 237, 1)'; // purple
+                // 0 = Green, >15 = Red
+                const normalized = Math.min(score / 15, 1);
+                const hue = Math.round(Math.max(0, 120 - normalized * 120));
+                return `hsl(${hue}, 80%, 50%)`;
+              };
               
               for (const k of keys) {
                 const isSelected = selected === k;
                 const sets = muscleWork[k] ?? 0;
-                const baseColor = MUSCLE_META[k].color;
+                
                 const color = isSelected
-                  ? hexToRgba(baseColor, 1)
+                  ? getFatigueColor(sets, true)
                   : sets > 0
-                    ? hexToRgba(baseColor, 0.55)
+                    ? getFatigueColor(sets, false)
                     : theme === 'light'
                       ? 'rgba(0,0,0,0.06)'
                       : 'rgba(255,255,255,0.12)';
@@ -296,9 +305,29 @@ export default function MusclesPage() {
                 const k = reverseMap[slug];
                 if (k) setSelected(s => s === k ? null : k);
               };
+
+              const highlyFatiguedSelectors = highlightedColors
+                .filter(color => color.startsWith('hsl('))
+                .filter(color => {
+                   const match = color.match(/hsl\((\d+),/);
+                   if (match) {
+                     const h = parseInt(match[1]);
+                     return h <= 30; // 0 to 30 is red to orange
+                   }
+                   return false;
+                })
+                .map(color => `.muscles-diagrams svg path[fill="${color}"]`)
+                .join(',\n');
               
               return (
                 <div className="muscles-diagrams">
+                  {highlyFatiguedSelectors.length > 0 && (
+                    <style>{`
+                      ${highlyFatiguedSelectors} {
+                        animation: svgPulseGlow 1.5s infinite alternate ease-in-out !important;
+                      }
+                    `}</style>
+                  )}
                   <div className="muscles-diagram-wrap" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                     <Model
                       data={data}

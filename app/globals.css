@@ -646,13 +646,12 @@ tbody tr:hover {
 }
 
 .muscles-diagrams svg {
-  animation: svgPulseGlow 3s infinite ease-in-out;
   overflow: visible !important;
 }
 
 @keyframes svgPulseGlow {
-  0%, 100% { filter: drop-shadow(0 0 5px rgba(239, 68, 68, 0.15)); }
-  50% { filter: drop-shadow(0 0 18px rgba(239, 68, 68, 0.45)); }
+  0%, 100% { filter: drop-shadow(0 0 6px rgba(239, 68, 68, 0.4)); }
+  50% { filter: drop-shadow(0 0 20px rgba(239, 68, 68, 0.9)); }
 }
 
 .muscles-diagrams svg path {
