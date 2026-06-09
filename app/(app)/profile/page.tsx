@@ -164,7 +164,11 @@ export default function ProfilePage() {
       let fLabel = 'Optimal';
       let fColor = 'var(--accent-cyan)';
       
-      if (ratio < 0.8) {
+      // Prevent false "Overreaching" alerts when total volume is very low
+      if (acuteSets < 12) {
+        fLabel = 'Under-trained';
+        fColor = 'var(--text-muted)';
+      } else if (ratio < 0.8) {
         fLabel = 'Under-trained';
         fColor = 'var(--text-muted)';
       } else if (ratio > 1.5) {
