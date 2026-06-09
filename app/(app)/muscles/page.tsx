@@ -302,28 +302,28 @@ export default function MusclesPage() {
                   <div className="muscles-diagram-wrap" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                     <Model
                       data={data}
-                      bodyColor="rgba(255,255,255,0.12)"
-                      style={{ width: '100%', height: 'auto' }}
+                      bodyColor={theme === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.12)'}
+                      style={{ width: '80%', height: 'auto', margin: '0 auto' }}
                       svgStyle={{ overflow: 'visible' }}
                       highlightedColors={highlightedColors}
                       onClick={handleClick}
                       type="anterior"
                     />
-                    <div className="text-center mt-2 text-[rgba(255,255,255,0.2)] font-['Inter',sans-serif] tracking-[4px] text-lg">
+                    <div className="text-center mt-2 font-['Inter',sans-serif] tracking-[4px] text-sm font-bold" style={{ color: 'var(--text-muted)' }}>
                       FRONT
                     </div>
                   </div>
                   <div className="muscles-diagram-wrap" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                     <Model
                       data={data}
-                      bodyColor="rgba(255,255,255,0.12)"
-                      style={{ width: '100%', height: 'auto' }}
+                      bodyColor={theme === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.12)'}
+                      style={{ width: '80%', height: 'auto', margin: '0 auto' }}
                       svgStyle={{ overflow: 'visible' }}
                       highlightedColors={highlightedColors}
                       onClick={handleClick}
                       type="posterior"
                     />
-                    <div className="text-center mt-2 text-[rgba(255,255,255,0.2)] font-['Inter',sans-serif] tracking-[4px] text-lg">
+                    <div className="text-center mt-2 font-['Inter',sans-serif] tracking-[4px] text-sm font-bold" style={{ color: 'var(--text-muted)' }}>
                       BACK
                     </div>
                   </div>
