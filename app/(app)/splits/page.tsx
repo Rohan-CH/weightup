@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import { MuscleKey, MUSCLE_META } from '@/lib/muscle-utils';
 import {
   Layers, ChevronDown, ChevronUp, Plus, Dumbbell, Search,
-  RefreshCw, X, Trash2, Sparkles, Calendar, Users, ArrowRight, Pencil, MoreVertical, LayoutGrid, CheckCircle,
+  RefreshCw, X, Trash2, Sparkles, Calendar, Users, ArrowRight, Pencil, MoreVertical, LayoutGrid, CheckCircle, Activity,
 } from 'lucide-react';
 import UserProfileModal from '../UserProfileModal';
 
@@ -642,6 +642,43 @@ export default function SplitsPage() {
                   />
                 </div>
 
+                {/* Routine Balance Heatmap */}
+                {builderDays.some(d => d.muscles.length > 0) && (
+                  <div style={{ marginBottom: 16, padding: 12, background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-color)', borderRadius: 8 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <Activity size={12} />
+                      Routine Balance
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                      {(Object.keys(MUSCLE_META) as MuscleKey[]).map(key => {
+                        const meta = MUSCLE_META[key];
+                        // count how many days target this muscle
+                        const hits = builderDays.filter(d => d.muscles.includes(key)).length;
+                        if (hits === 0) return null;
+                        
+                        // color intensity based on hits (1 = 80 opacity, 2+ = full)
+                        const opacity = hits === 1 ? 'CC' : ''; // CC is 80% opacity in hex
+                        return (
+                          <div
+                            key={key}
+                            style={{
+                              padding: '2px 8px',
+                              borderRadius: 4,
+                              fontSize: 10,
+                              fontWeight: 700,
+                              background: `${meta.color}${opacity}`,
+                              color: '#000',
+                            }}
+                            title={`Targeted on ${hits} day(s)`}
+                          >
+                            {meta.label} &times;{hits}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 <label className="label" style={{ marginBottom: 12 }}>Training Days</label>
 
                 {builderDays.map((day, di) => (
@@ -880,6 +917,20 @@ export default function SplitsPage() {
                             )}
                           </div>
                         ))}
+                        
+                        <div style={{ marginTop: 12 }}>
+                          <button 
+                            className="btn-primary" 
+                            style={{ width: '100%', gap: 8, padding: '10px', fontSize: 13, background: `linear-gradient(135deg, ${accent}, ${accent}99)` }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(`/log?split_day_id=${day.id}`);
+                            }}
+                          >
+                            Start Workout
+                            <ArrowRight size={14} />
+                          </button>
+                        </div>
                       </div>
                     )}
 

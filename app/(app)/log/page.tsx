@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Plus, Trash2, Dumbbell, Search, TrendingUp, X } from 'lucide-react';
+import { Plus, Trash2, Dumbbell, Search, TrendingUp, X, Layers, ArrowRight } from 'lucide-react';
 import { MuscleKey, MUSCLE_META, getMusclesForExercise } from '@/lib/muscle-utils';
 import {
   LineChart,
@@ -59,6 +59,10 @@ export default function LogWorkoutPage() {
   const [reactions, setReactions] = useState<Record<string, { emoji: string; count: number }[]>>({});
   
   const [fatigueScores, setFatigueScores] = useState<Record<string, number>>({});
+  
+  // Split Execution state
+  const [splitQueue, setSplitQueue] = useState<{ id: string; name: string }[]>([]);
+  const [splitDayName, setSplitDayName] = useState('');
   
   // Chart related state
   const [chartsData, setChartsData] = useState<ExerciseChart[]>([]);
@@ -210,7 +214,37 @@ export default function LogWorkoutPage() {
   useEffect(() => {
     fetchExercises();
     fetchLogs();
+
+    // Check for split execution
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const splitDayId = params.get('split_day_id');
+      if (splitDayId) {
+        loadSplitQueue(splitDayId);
+      }
+    }
   }, []);
+
+  const loadSplitQueue = async (splitDayId: string) => {
+    const { data: dayData } = await supabase.from('split_days').select('name').eq('id', splitDayId).single();
+    if (dayData) setSplitDayName(dayData.name);
+
+    const { data } = await supabase
+      .from('split_day_exercises')
+      .select('exercise_id, exercise_name')
+      .eq('split_day_id', splitDayId)
+      .order('exercise_order', { ascending: true });
+      
+    if (data && data.length > 0) {
+      const queue = data.map((d: any) => ({
+        id: d.exercise_id,
+        name: d.exercise_name,
+      }));
+      setSplitQueue(queue);
+      setSelectedExercise(queue[0].id);
+      setSearchTerm(queue[0].name);
+    }
+  };
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -360,6 +394,47 @@ export default function LogWorkoutPage() {
         <h1>Log Workout</h1>
         <p>Track your exercises, weights, and reps</p>
       </div>
+
+      {/* Split Execution Banner */}
+      {splitQueue.length > 0 && (
+        <div style={{ marginBottom: 16, background: 'rgba(124, 58, 237, 0.15)', border: '1px solid rgba(124, 58, 237, 0.3)', padding: '12px 16px', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+          <div>
+            <div style={{ fontSize: 11, textTransform: 'uppercase', color: 'var(--accent-purple)', fontWeight: 700, letterSpacing: '0.05em', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <Layers size={12} />
+              Executing Split Day
+            </div>
+            <div style={{ fontSize: 15, color: 'var(--text-primary)', fontWeight: 600 }}>
+              {splitDayName || 'Loading...'}
+            </div>
+          </div>
+          {splitQueue.length > 1 ? (
+            <button
+              className="btn-primary"
+              style={{ fontSize: 12, padding: '6px 12px', minHeight: 0, gap: 4, background: 'linear-gradient(135deg, var(--accent-purple), #9333ea)' }}
+              onClick={() => {
+                const nextQueue = splitQueue.slice(1);
+                setSplitQueue(nextQueue);
+                setSelectedExercise(nextQueue[0].id);
+                setSearchTerm(nextQueue[0].name);
+              }}
+            >
+              Next Exercise
+              <ArrowRight size={14} />
+            </button>
+          ) : (
+            <button
+              className="btn-secondary"
+              style={{ fontSize: 12, padding: '6px 12px', minHeight: 0 }}
+              onClick={() => {
+                setSplitQueue([]);
+                setSplitDayName('');
+              }}
+            >
+              Finish Split
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Log Form */}
       <div className="card" style={{ marginBottom: 32, maxWidth: 600, position: 'relative', zIndex: showDropdown ? 60 : 'auto' }}>
