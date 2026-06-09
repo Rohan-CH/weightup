@@ -327,7 +327,7 @@ export default function ProfilePage() {
         <div className="card">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
             <Activity size={18} style={{ color: fatigue.color }} />
-            <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Fatigue Level</h3>
+            <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Systemic Fatigue</h3>
           </div>
           <div style={{ fontSize: 24, fontWeight: 800, color: fatigue.color }}>
             {fatigue.label}

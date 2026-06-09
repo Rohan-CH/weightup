@@ -904,7 +904,7 @@ export default function DashboardPage() {
         <div style={{ flex: 1 }}>
             <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
               <Target size={18} style={{ color: 'var(--accent-cyan)' }} />
-              Fatigue
+              Muscle Fatigue
             </h3>
             
             {/* Fatigued muscles list */}
