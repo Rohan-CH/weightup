@@ -1014,16 +1014,7 @@ export default function SplitsPage() {
                       )
                     )}
 
-                    {/* Quick log */}
-                    <button
-                      className="btn-primary"
-                      style={{ width: '100%', marginTop: 14, gap: 8, fontSize: 13 }}
-                      onClick={() => router.push('/log')}
-                    >
-                      <Dumbbell size={15} />
-                      Log {day.name} Workout
-                      <ArrowRight size={14} />
-                    </button>
+                    {/* Quick log removed as 'Start Workout' button is in the exercise list */}
                   </div>
                 )}
               </div>
