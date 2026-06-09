@@ -747,19 +747,20 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8, justifyContent: 'space-between' }} className="no-scrollbar">
+        <div style={{ display: 'flex', gap: 4, overflowX: 'auto', paddingBottom: 8 }} className="no-scrollbar">
           {stats.consistency30Days.map((status, idx) => (
             <div
               key={idx}
               title={status === 'active' ? 'Workout completed' : 'Rest day'}
               style={{
-                width: 12,
+                flex: 1,
+                minWidth: 4,
                 height: 32,
-                flexShrink: 0,
                 borderRadius: 4,
                 background: status === 'active' ? 'var(--accent-cyan)' : (theme === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.04)'),
                 opacity: status === 'active' ? 1 : 0.6,
                 boxShadow: status === 'active' ? '0 0 8px rgba(0, 245, 255, 0.3)' : 'none',
+                transition: 'opacity 0.2s',
               }}
             />
           ))}
