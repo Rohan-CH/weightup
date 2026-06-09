@@ -304,6 +304,7 @@ export default function MusclesPage() {
                       data={data}
                       bodyColor="rgba(255,255,255,0.12)"
                       style={{ width: '100%', height: 'auto' }}
+                      svgStyle={{ overflow: 'visible' }}
                       highlightedColors={highlightedColors}
                       onClick={handleClick}
                       type="anterior"
@@ -317,6 +318,7 @@ export default function MusclesPage() {
                       data={data}
                       bodyColor="rgba(255,255,255,0.12)"
                       style={{ width: '100%', height: 'auto' }}
+                      svgStyle={{ overflow: 'visible' }}
                       highlightedColors={highlightedColors}
                       onClick={handleClick}
                       type="posterior"
