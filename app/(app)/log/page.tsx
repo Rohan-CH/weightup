@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Plus, Trash2, Dumbbell, Search, TrendingUp } from 'lucide-react';
-import { MuscleKey, MUSCLE_META } from '@/lib/muscle-utils';
+import { Plus, Trash2, Dumbbell, Search, TrendingUp, X } from 'lucide-react';
+import { MuscleKey, MUSCLE_META, getMusclesForExercise } from '@/lib/muscle-utils';
 import {
   LineChart,
   Line,
@@ -41,8 +41,8 @@ export default function LogWorkoutPage() {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [filteredExercises, setFilteredExercises] = useState<Exercise[]>([]);
   const [selectedExercise, setSelectedExercise] = useState('');
-  const [weight, setWeight] = useState('');
-  const [reps, setReps] = useState('');
+  const [sets, setSets] = useState([{ weight: '', reps: '' }]);
+  const [restTimer, setRestTimer] = useState(0);
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [logs, setLogs] = useState<WorkoutLog[]>([]);
   const [loading, setLoading] = useState(false);
@@ -57,6 +57,8 @@ export default function LogWorkoutPage() {
   const [visibleLogsCount, setVisibleLogsCount] = useState(10);
   // emoji reactions left by circle members, keyed by log id
   const [reactions, setReactions] = useState<Record<string, { emoji: string; count: number }[]>>({});
+  
+  const [fatigueScores, setFatigueScores] = useState<Record<string, number>>({});
   
   // Chart related state
   const [chartsData, setChartsData] = useState<ExerciseChart[]>([]);
@@ -161,6 +163,45 @@ export default function LogWorkoutPage() {
       });
 
       setChartsData(charts);
+
+      // Compute fatigue scores for warnings
+      const allMuscleKeys = Object.keys(MUSCLE_META) as MuscleKey[];
+      const fatigueScoresObj: Record<string, number> = {};
+      const logsByMuscle: Record<string, any[]> = {};
+      allMuscleKeys.forEach(m => { fatigueScoresObj[m] = 0; logsByMuscle[m] = []; });
+
+      allLogs.forEach((log: any) => {
+        const muscles = getMusclesForExercise(log.exercises?.name || '', log.exercises?.target_muscles);
+        muscles.forEach(m => {
+          if (logsByMuscle[m]) logsByMuscle[m].push(log);
+        });
+      });
+
+      const nowTime = new Date();
+      allMuscleKeys.forEach(m => {
+        const mLogs = logsByMuscle[m];
+        if (mLogs.length === 0) return;
+
+        let fatigue = 0;
+        let prevTime: Date | null = null;
+
+        for (const log of mLogs) {
+          const logTime = new Date(log.created_at || (log.logged_at + 'T12:00:00Z'));
+          if (prevTime !== null) {
+            const hours = (logTime.getTime() - prevTime.getTime()) / 3600000;
+            if (hours > 0) fatigue = fatigue * Math.pow(0.5, hours / 24);
+          }
+          fatigue = Math.min(100, fatigue + 25);
+          prevTime = logTime;
+        }
+
+        if (prevTime !== null) {
+          const hours = (nowTime.getTime() - prevTime.getTime()) / 3600000;
+          if (hours > 0) fatigue = fatigue * Math.pow(0.5, hours / 24);
+        }
+        fatigueScoresObj[m] = Math.round(fatigue);
+      });
+      setFatigueScores(fatigueScoresObj);
     }
     
     setLogLoading(false);
@@ -170,6 +211,16 @@ export default function LogWorkoutPage() {
     fetchExercises();
     fetchLogs();
   }, []);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (restTimer > 0) {
+      interval = setInterval(() => {
+        setRestTimer(prev => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [restTimer]);
 
   useEffect(() => {
     if (searchTerm) {
@@ -220,8 +271,10 @@ export default function LogWorkoutPage() {
     setError('');
     setSuccess('');
 
-    if (!selectedExercise || !weight || !reps) {
-      setError('Please fill in all fields');
+    const validSets = sets.filter(s => s.weight.trim() !== '' && s.reps.trim() !== '');
+
+    if (!selectedExercise || validSets.length === 0) {
+      setError('Please select an exercise and fill at least one valid set');
       return;
     }
 
@@ -229,20 +282,28 @@ export default function LogWorkoutPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const { error } = await supabase.from('workout_logs').insert({
+    const payload = validSets.map(s => ({
       user_id: user.id,
       exercise_id: selectedExercise,
-      weight_kg: parseFloat(weight),
-      reps: parseInt(reps),
+      weight_kg: parseFloat(s.weight),
+      reps: parseInt(s.reps),
       logged_at: date,
-    });
+    }));
+
+    const { error } = await supabase.from('workout_logs').insert(payload);
 
     if (error) {
       setError(error.message);
     } else {
-      setSuccess('Workout logged!');
-      setWeight('');
-      setReps('');
+      setSuccess(`Logged ${validSets.length} set(s)!`);
+      
+      // Keep one empty set, or carry over last weight
+      const lastSet = validSets[validSets.length - 1];
+      setSets([{ weight: lastSet ? lastSet.weight : '', reps: '' }]);
+      
+      // Start 90s rest timer
+      setRestTimer(90);
+      
       fetchLogs();
       setTimeout(() => setSuccess(''), 3000);
     }
@@ -461,39 +522,114 @@ export default function LogWorkoutPage() {
             </div>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 140px), 1fr))', gap: 12 }}>
-            <div className="form-group">
-              <label className="label">Weight (kg)</label>
-              <input
-                className="input"
-                type="number"
-                step="0.5"
-                min="0"
-                placeholder="0"
-                value={weight}
-                onChange={(e) => setWeight(e.target.value)}
-              />
+          {/* Auto-Regulation Warning */}
+          {(() => {
+            const selectedExDetails = exercises.find(e => e.id === selectedExercise);
+            if (!selectedExDetails) return null;
+            const targetMuscles = getMusclesForExercise(selectedExDetails.name, selectedExDetails.target_muscles);
+            const fatiguedMuscles = targetMuscles.filter(m => (fatigueScores[m] || 0) > 80);
+            
+            if (fatiguedMuscles.length > 0) {
+              const labels = fatiguedMuscles.map(m => MUSCLE_META[m as MuscleKey].label).join(', ');
+              return (
+                <div style={{ padding: 12, marginBottom: 16, background: 'rgba(239, 68, 68, 0.1)', border: '1px solid #ef4444', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span style={{ fontSize: 20 }}>⚠️</span>
+                  <div style={{ fontSize: 13, color: '#ef4444', lineHeight: 1.4 }}>
+                    <strong style={{ display: 'block', marginBottom: 2 }}>High Muscle Fatigue Detected</strong>
+                    Your {labels} {fatiguedMuscles.length > 1 ? 'are' : 'is'} over 80% fatigued. Consider resting or training a different muscle group today.
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          })()}
+
+          {/* Rest Timer */}
+          {restTimer > 0 && (
+            <div style={{ padding: 12, marginBottom: 16, background: 'rgba(0,245,255,0.1)', border: '1px solid var(--accent-cyan)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              <span style={{ fontSize: 18 }}>⏱️</span>
+              <span style={{ color: 'var(--accent-cyan)', fontWeight: 700, fontSize: 16 }}>Rest Timer: {Math.floor(restTimer / 60)}:{(restTimer % 60).toString().padStart(2, '0')}</span>
+              <button type="button" onClick={() => setRestTimer(0)} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', marginLeft: 'auto' }}><X size={16}/></button>
             </div>
-            <div className="form-group">
-              <label className="label">Reps</label>
-              <input
-                className="input"
-                type="number"
-                min="1"
-                placeholder="0"
-                value={reps}
-                onChange={(e) => setReps(e.target.value)}
-              />
+          )}
+
+          {/* Set Grid */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '40px 1fr 1fr 40px', gap: 8, color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, padding: '0 4px' }}>
+              <div style={{ textAlign: 'center' }}>SET</div>
+              <div>KG</div>
+              <div>REPS</div>
+              <div></div>
             </div>
-            <div className="form-group">
-              <label className="label">Date</label>
-              <input
-                className="input"
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-              />
-            </div>
+            
+            {sets.map((s, idx) => (
+              <div key={idx} style={{ display: 'grid', gridTemplateColumns: '40px 1fr 1fr 40px', gap: 8, alignItems: 'center' }}>
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', fontWeight: 600, background: 'rgba(255,255,255,0.03)', height: '40px', borderRadius: 4 }}>
+                  {idx + 1}
+                </div>
+                <input
+                  className="input"
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  placeholder="0"
+                  value={s.weight}
+                  onChange={(e) => {
+                    const newSets = [...sets];
+                    newSets[idx].weight = e.target.value;
+                    setSets(newSets);
+                  }}
+                  style={{ height: '40px', padding: '0 12px' }}
+                />
+                <input
+                  className="input"
+                  type="number"
+                  min="1"
+                  placeholder="0"
+                  value={s.reps}
+                  onChange={(e) => {
+                    const newSets = [...sets];
+                    newSets[idx].reps = e.target.value;
+                    setSets(newSets);
+                  }}
+                  style={{ height: '40px', padding: '0 12px' }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (sets.length > 1) {
+                      setSets(sets.filter((_, i) => i !== idx));
+                    } else {
+                      setSets([{ weight: '', reps: '' }]);
+                    }
+                  }}
+                  style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', height: '40px' }}
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            ))}
+            
+            <button
+              type="button"
+              onClick={() => {
+                const lastSet = sets[sets.length - 1];
+                setSets([...sets, { weight: lastSet ? lastSet.weight : '', reps: '' }]);
+              }}
+              style={{ padding: 8, background: 'rgba(255,255,255,0.03)', border: '1px dashed rgba(255,255,255,0.1)', borderRadius: 4, color: 'var(--text-primary)', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 4, transition: 'background 0.2s' }}
+            >
+              <Plus size={14} /> Add Set
+            </button>
+          </div>
+
+          <div className="form-group" style={{ maxWidth: 200 }}>
+            <label className="label">Date</label>
+            <input
+              className="input"
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+            />
           </div>
 
           {error && <p className="error-text" style={{ marginBottom: 12 }}>{error}</p>}
