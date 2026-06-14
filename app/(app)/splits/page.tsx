@@ -341,6 +341,23 @@ export default function SplitsPage() {
     setExerciseSearch('');
   };
 
+  /* ─── Create Custom Exercise ─── */
+  const createCustomExercise = async (name: string) => {
+    if (!name.trim() || !currentUserId) return;
+    const { data, error } = await supabase
+      .from('exercises')
+      .insert({ name: name.trim(), is_custom: true, created_by: currentUserId })
+      .select('id, name')
+      .single();
+
+    if (!error && data) {
+      setAllExercises(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
+      if (addingToDayId) {
+        addExerciseToDay(addingToDayId, data);
+      }
+    }
+  };
+
   /* ─── Remove exercise from a day ─── */
   const removeExerciseFromDay = async (dayId: string, exerciseRowId: string) => {
     await supabase
@@ -990,7 +1007,17 @@ export default function SplitsPage() {
                             })}
                             {filteredExercises.length === 0 && (
                               <div style={{ padding: '12px 16px', color: 'var(--text-muted)', fontSize: 14 }}>
-                                No exercises found
+                                No exercises found.
+                                <div style={{ marginTop: 8 }}>
+                                  <button
+                                    className="btn-secondary"
+                                    style={{ width: '100%', fontSize: 13 }}
+                                    onClick={() => createCustomExercise(exerciseSearch)}
+                                  >
+                                    <Plus size={14} style={{ marginRight: 6 }} />
+                                    Add "{exerciseSearch}"
+                                  </button>
+                                </div>
                               </div>
                             )}
                           </div>

@@ -714,7 +714,7 @@ export default function DashboardPage() {
           </div>
           <span>Log Workout</span>
         </button>
-        <button className="dash-quick-btn" onClick={() => router.push('/leaderboard')}>
+        <button className="dash-quick-btn" onClick={() => router.push('/circles?tab=leaderboard')}>
           <div className="dash-quick-icon" style={{ background: 'rgba(245,158,11,0.1)', color: 'var(--accent-orange)' }}>
             <Trophy size={18} />
           </div>

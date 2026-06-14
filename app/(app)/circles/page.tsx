@@ -111,6 +111,7 @@ function CirclesPageInner() {
   const supabase = createClient();
   const searchParams = useSearchParams();
   const logParam = searchParams.get('log');
+  const tabParam = searchParams.get('tab');
 
   const [userId, setUserId] = useState<string | null>(null);
   const [view, setView] = useState<View>('list');
@@ -286,7 +287,7 @@ function CirclesPageInner() {
   const openCircle = async (circle: Circle) => {
     setActiveCircle(circle);
     setView('circle');
-    setCircleTab('members');
+    setCircleTab(tabParam === 'leaderboard' ? 'leaderboard' : 'members');
     setVisibleFeedCount(10);
     setRenaming(false);
     setError('');

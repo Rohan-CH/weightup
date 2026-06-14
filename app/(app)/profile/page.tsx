@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Camera, Save, User, Dumbbell, Trophy, Calendar, Activity } from 'lucide-react';
+import { Camera, Save, User, Dumbbell, Trophy, Calendar, Activity, Download } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface Profile {
@@ -61,6 +61,8 @@ export default function ProfilePage() {
   const [dailyLogCounts, setDailyLogCounts] = useState<Record<string, number>>({});
   const [hoveredDay, setHoveredDay] = useState<{ date: string; count: number; x: number; y: number } | null>(null);
 
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+
   useEffect(() => {
     const checkTheme = () => {
       const isL = document.documentElement.getAttribute('data-theme') === 'light';
@@ -69,7 +71,18 @@ export default function ProfilePage() {
     checkTheme();
     const observer = new MutationObserver(checkTheme);
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-    return () => observer.disconnect();
+    
+    // Handle PWA install prompt
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
   }, []);
 
 
@@ -267,6 +280,15 @@ export default function ProfilePage() {
       setTimeout(() => setMessage(''), 3000);
     }
     setSaving(false);
+  };
+
+  const handleInstallApp = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setDeferredPrompt(null);
+    }
   };
 
   const handleSaveWeight = async () => {
@@ -502,6 +524,12 @@ export default function ProfilePage() {
           <button className="btn-primary" onClick={handleSave} disabled={saving} style={{ width: '100%' }}>
             {saving ? <span className="spinner" /> : <><Save size={16} /> Save Changes</>}
           </button>
+
+          {deferredPrompt && (
+            <button className="btn-secondary" onClick={handleInstallApp} style={{ width: '100%', marginTop: 12 }}>
+              <Download size={16} /> Add to Homescreen
+            </button>
+          )}
         </div>
 
         {/* Stats Card */}
