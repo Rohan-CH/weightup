@@ -61,7 +61,7 @@ export default function ProfilePage() {
   const [dailyLogCounts, setDailyLogCounts] = useState<Record<string, number>>({});
   const [hoveredDay, setHoveredDay] = useState<{ date: string; count: number; x: number; y: number } | null>(null);
 
-
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 
   useEffect(() => {
     const checkTheme = () => {
@@ -72,10 +72,16 @@ export default function ProfilePage() {
     const observer = new MutationObserver(checkTheme);
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
     
-
+    // Handle PWA install prompt
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
     return () => {
       observer.disconnect();
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     };
   }, []);
 
@@ -276,7 +282,14 @@ export default function ProfilePage() {
     setSaving(false);
   };
 
-
+  const handleInstallApp = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setDeferredPrompt(null);
+    }
+  };
 
   const handleSaveWeight = async () => {
     if (!newWeight || isNaN(parseFloat(newWeight))) return;
@@ -512,7 +525,11 @@ export default function ProfilePage() {
             {saving ? <span className="spinner" /> : <><Save size={16} /> Save Changes</>}
           </button>
 
-
+          {deferredPrompt && (
+            <button className="btn-secondary" onClick={handleInstallApp} style={{ width: '100%', marginTop: 12 }}>
+              <Download size={16} /> Add to Homescreen
+            </button>
+          )}
         </div>
 
         {/* Stats Card */}
