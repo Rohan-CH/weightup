@@ -71,6 +71,7 @@ function getAccent(id: string) {
    CUSTOM BUILDER — day data shape
 ───────────────────────────────────────────────────────────── */
 interface BuilderDay {
+  id?: string;
   name: string;
   muscles: MuscleKey[];
 }
@@ -109,6 +110,7 @@ export default function SplitsPage() {
 
   // Custom split builder
   const [showBuilder, setShowBuilder] = useState(false);
+  const [editSplitId, setEditSplitId] = useState<string | null>(null);
   const [builderName, setBuilderName] = useState('');
   const [builderDays, setBuilderDays] = useState<BuilderDay[]>([{ name: '', muscles: [] }]);
   const [builderSaving, setBuilderSaving] = useState(false);
@@ -292,6 +294,19 @@ export default function SplitsPage() {
     setView('select');
   };
 
+  /* ─── Edit split ─── */
+  const handleEditSplit = () => {
+    if (!activeSplit) return;
+    setEditSplitId(activeSplit.id);
+    setBuilderName(activeSplit.name);
+    setBuilderDays(days.map(d => ({
+      id: d.id,
+      name: d.name,
+      muscles: [...d.muscles]
+    })));
+    setShowBuilder(true);
+  };
+
   /* ─── Toggle day expansion ─── */
   const toggleDay = (dayId: string) => {
     setExpandedDays(prev => {
@@ -382,6 +397,36 @@ export default function SplitsPage() {
     }
   }, [exerciseSearch, allExercises]);
 
+  /* ─── Delete custom split ─── */
+  const deleteCustomSplit = async () => {
+    if (!editSplitId) return;
+    if (!window.confirm('Are you sure you want to delete this split? All days and assigned exercises will be lost.')) return;
+    
+    setBuilderSaving(true);
+    await supabase.from('splits').delete().eq('id', editSplitId);
+    
+    // Reset state
+    setShowBuilder(false);
+    setEditSplitId(null);
+    setBuilderName('');
+    setBuilderDays([{ name: '', muscles: [] }]);
+    setBuilderSaving(false);
+    
+    // Refresh splits list
+    const { data: splitsData } = await supabase
+      .from('splits')
+      .select('*')
+      .order('is_default', { ascending: false })
+      .order('name');
+    if (splitsData) setSplits(splitsData);
+    
+    // Check if the deleted split was active
+    if (activeSplit?.id === editSplitId) {
+      setActiveSplit(null);
+      setView('select');
+    }
+  };
+
   /* ─── Custom split builder ─── */
   const saveCustomSplit = async () => {
     if (!builderName.trim()) { setBuilderError('Please give your split a name.'); return; }
@@ -396,48 +441,131 @@ export default function SplitsPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // Create split
-    const { data: splitData, error: splitErr } = await supabase
-      .from('splits')
-      .insert({
-        name: builderName.trim(),
-        description: `Custom split: ${builderDays.filter(d => d.name.trim()).map(d => d.name.trim()).join(', ')}`,
-        frequency: `${builderDays.filter(d => d.name.trim()).length} days/week`,
-        is_default: false,
-        created_by: user.id,
-      })
-      .select()
-      .single();
+    let splitId = editSplitId;
+    const description = `Custom split: ${builderDays.filter(d => d.name.trim()).map(d => d.name.trim()).join(', ')}`;
+    const frequency = `${builderDays.filter(d => d.name.trim()).length} days/week`;
 
-    if (splitErr || !splitData) {
-      setBuilderError(splitErr?.message || 'Failed to create split.');
-      setBuilderSaving(false);
-      return;
-    }
+    if (splitId) {
+      // --- EDIT MODE ---
+      const { error: splitErr } = await supabase
+        .from('splits')
+        .update({
+          name: builderName.trim(),
+          description,
+          frequency,
+        })
+        .eq('id', splitId);
+        
+      if (splitErr) {
+        setBuilderError(splitErr?.message || 'Failed to update split.');
+        setBuilderSaving(false);
+        return;
+      }
 
-    // Create days + muscles
-    for (let i = 0; i < builderDays.length; i++) {
-      const bd = builderDays[i];
-      if (!bd.name.trim()) continue;
-
-      const { data: dayData } = await supabase
+      // Fetch existing days
+      const { data: existingDays } = await supabase
         .from('split_days')
-        .insert({ split_id: splitData.id, name: bd.name.trim(), day_order: i + 1 })
+        .select('id')
+        .eq('split_id', splitId);
+        
+      const existingIds = (existingDays || []).map((d: any) => d.id);
+      const builderIds = builderDays.filter(d => d.id).map(d => d.id as string);
+      
+      // Delete removed days
+      const idsToDelete = existingIds.filter((id: string) => !builderIds.includes(id));
+      if (idsToDelete.length > 0) {
+        await supabase.from('split_days').delete().in('id', idsToDelete);
+      }
+
+      // Update / Insert days
+      for (let i = 0; i < builderDays.length; i++) {
+        const bd = builderDays[i];
+        if (!bd.name.trim()) continue;
+
+        let dayId = bd.id;
+        
+        if (dayId) {
+          // Update existing day
+          await supabase
+            .from('split_days')
+            .update({ name: bd.name.trim(), day_order: i + 1 })
+            .eq('id', dayId);
+            
+          // Delete old muscles
+          await supabase.from('split_day_muscles').delete().eq('split_day_id', dayId);
+        } else {
+          // Insert new day
+          const { data: newDay } = await supabase
+            .from('split_days')
+            .insert({ split_id: splitId, name: bd.name.trim(), day_order: i + 1 })
+            .select()
+            .single();
+            
+          if (newDay) dayId = newDay.id;
+        }
+
+        // Insert new muscles
+        if (dayId && bd.muscles.length > 0) {
+          await supabase
+            .from('split_day_muscles')
+            .insert(bd.muscles.map(m => ({ split_day_id: dayId, muscle_key: m })));
+        }
+      }
+      
+      // Refresh detail view if it's the active one
+      if (activeSplit?.id === splitId) {
+        const updatedSplit = { ...activeSplit, name: builderName.trim(), description, frequency };
+        setActiveSplit(updatedSplit);
+        await loadSplitDetail(splitId, user.id);
+      }
+
+    } else {
+      // --- CREATE MODE ---
+      const { data: splitData, error: splitErr } = await supabase
+        .from('splits')
+        .insert({
+          name: builderName.trim(),
+          description,
+          frequency,
+          is_default: false,
+          created_by: user.id,
+        })
         .select()
         .single();
 
-      if (dayData && bd.muscles.length > 0) {
-        await supabase
-          .from('split_day_muscles')
-          .insert(bd.muscles.map(m => ({ split_day_id: dayData.id, muscle_key: m })));
+      if (splitErr || !splitData) {
+        setBuilderError(splitErr?.message || 'Failed to create split.');
+        setBuilderSaving(false);
+        return;
       }
-    }
+      
+      splitId = splitData.id;
 
-    // Activate this split
-    await selectSplit(splitData as Split);
+      // Create days + muscles
+      for (let i = 0; i < builderDays.length; i++) {
+        const bd = builderDays[i];
+        if (!bd.name.trim()) continue;
+
+        const { data: dayData } = await supabase
+          .from('split_days')
+          .insert({ split_id: splitId, name: bd.name.trim(), day_order: i + 1 })
+          .select()
+          .single();
+
+        if (dayData && bd.muscles.length > 0) {
+          await supabase
+            .from('split_day_muscles')
+            .insert(bd.muscles.map(m => ({ split_day_id: dayData.id, muscle_key: m })));
+        }
+      }
+
+      // Activate this new split
+      await selectSplit({ ...splitData } as Split);
+    }
 
     // Reset builder
     setShowBuilder(false);
+    setEditSplitId(null);
     setBuilderName('');
     setBuilderDays([{ name: '', muscles: [] }]);
     setBuilderSaving(false);
@@ -641,11 +769,24 @@ export default function SplitsPage() {
               <div className="split-builder-head">
                 <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Layers size={20} style={{ color: 'var(--accent-purple)' }} />
-                  Create Custom Split
+                  {editSplitId ? 'Edit Custom Split' : 'Create Custom Split'}
                 </span>
-                <button className="dash-drawer-close" onClick={() => setShowBuilder(false)}>
-                  <X size={18} />
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  {editSplitId && (
+                    <button 
+                      className="btn-danger" 
+                      style={{ padding: '6px 10px', minHeight: 'unset', fontSize: 13 }}
+                      onClick={deleteCustomSplit}
+                      disabled={builderSaving}
+                    >
+                      <Trash2 size={14} />
+                      Delete
+                    </button>
+                  )}
+                  <button className="dash-drawer-close" onClick={() => { setShowBuilder(false); setEditSplitId(null); }}>
+                    <X size={18} />
+                  </button>
+                </div>
               </div>
               <div className="split-builder-body">
                 <div className="form-group">
@@ -781,7 +922,7 @@ export default function SplitsPage() {
                   onClick={saveCustomSplit}
                   disabled={builderSaving}
                 >
-                  {builderSaving ? <span className="spinner" /> : <><Layers size={16} /> Create & Activate Split</>}
+                  {builderSaving ? <span className="spinner" /> : <><Layers size={16} /> {editSplitId ? 'Save Changes' : 'Create & Activate Split'}</>}
                 </button>
               </div>
             </div>
@@ -832,10 +973,18 @@ export default function SplitsPage() {
             </h1>
             <div className="split-detail-desc">{activeSplit.description}</div>
           </div>
-          <button className="split-change-btn" onClick={changeSplit}>
-            <RefreshCw size={15} />
-            Change Split
-          </button>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {(!activeSplit.is_default && activeSplit.created_by === currentUserId) && (
+              <button className="split-change-btn" onClick={handleEditSplit} style={{ color: 'var(--text-primary)', borderColor: 'var(--border-color)' }}>
+                <Pencil size={15} />
+                Edit Split
+              </button>
+            )}
+            <button className="split-change-btn" onClick={changeSplit}>
+              <RefreshCw size={15} />
+              Change Split
+            </button>
+          </div>
         </div>
 
         {/* Advantage callout */}
