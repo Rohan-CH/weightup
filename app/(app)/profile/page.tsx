@@ -22,6 +22,7 @@ interface PersonalStats {
   totalLogs: number;
   uniqueExercises: number;
   totalDays: number;
+  streak: number;
 }
 
 const getHeatmapGrid = () => {
@@ -45,7 +46,7 @@ export default function ProfilePage() {
   const [username, setUsername] = useState('');
   const [height, setHeight] = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const [stats, setStats] = useState<PersonalStats>({ totalLogs: 0, uniqueExercises: 0, totalDays: 0 });
+  const [stats, setStats] = useState<PersonalStats>({ totalLogs: 0, uniqueExercises: 0, totalDays: 0, streak: 0 });
   const [bodyMetrics, setBodyMetrics] = useState<BodyMetric[]>([]);
   const [newWeight, setNewWeight] = useState('');
   const [loading, setLoading] = useState(true);
@@ -128,21 +129,43 @@ export default function ProfilePage() {
 
     if (logs) {
       const uniqueExercises = new Set(logs.map((l: any) => l.exercise_id)).size;
-      const uniqueDays = new Set(logs.map((l: any) => l.logged_at)).size;
-      setStats({
-        totalLogs: logs.length,
-        uniqueExercises,
-        totalDays: uniqueDays,
-      });
-
-      const counts: Record<string, number> = {};
-      const today = new Date();
+      const uniqueDates = new Set<string>(logs.map((l: any) => l.logged_at));
+      const uniqueDays = uniqueDates.size;
+      
+      let streak = 0;
+      let restDayUsed = false;
+      const cursor = new Date();
       const dayStr = (d: Date) => {
         const y = d.getFullYear();
         const m = String(d.getMonth() + 1).padStart(2, '0');
         const day = String(d.getDate()).padStart(2, '0');
         return `${y}-${m}-${day}`;
       };
+      
+      if (!uniqueDates.has(dayStr(cursor))) cursor.setDate(cursor.getDate() - 1);
+      while (true) {
+        if (uniqueDates.has(dayStr(cursor))) {
+          streak++;
+          restDayUsed = false;
+          cursor.setDate(cursor.getDate() - 1);
+        } else if (!restDayUsed) {
+          restDayUsed = true;
+          cursor.setDate(cursor.getDate() - 1);
+        } else {
+          break;
+        }
+      }
+
+      setStats({
+        totalLogs: logs.length,
+        uniqueExercises,
+        totalDays: uniqueDays,
+        streak,
+      });
+
+      const counts: Record<string, number> = {};
+      const today = new Date();
+
 
       const date7 = new Date(today); date7.setDate(today.getDate() - 7);
       const str7 = dayStr(date7);
@@ -559,6 +582,15 @@ export default function ProfilePage() {
               </div>
               <div className="stat-value">{stats.totalDays}</div>
             </div>
+            {stats.streak > 0 && (
+              <div className="stat-card" style={{ border: '1px solid rgba(249,115,22,0.3)', background: 'linear-gradient(145deg, rgba(249,115,22,0.05) 0%, rgba(249,115,22,0.02) 100%)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                  <span style={{ fontSize: 18 }}>🔥</span>
+                  <span className="stat-label" style={{ margin: 0, color: 'var(--accent-orange)' }}>Current Streak</span>
+                </div>
+                <div className="stat-value" style={{ color: 'var(--accent-orange)' }}>{stats.streak} {stats.streak === 1 ? 'day' : 'days'}</div>
+              </div>
+            )}
           </div>
           
           {/* Weight Tracking Section */}

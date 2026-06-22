@@ -133,6 +133,7 @@ function CirclesPageInner() {
   const [circleTab, setCircleTab] = useState<'members' | 'activity' | 'leaderboard'>('members');
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState('');
+  const [memberStreaks, setMemberStreaks] = useState<Record<string, number>>({});
 
   // Leaderboard states
   const [lbTab, setLbTab] = useState<'exercise' | 'powerlifter'>('exercise');
@@ -297,14 +298,52 @@ function CirclesPageInner() {
       .select('user_id, role, profiles(username, avatar_url)')
       .eq('circle_id', circle.id);
     if (data) {
-      setMembers(
-        data.map((m: any) => ({
-          user_id: m.user_id,
-          role: m.role,
-          username: m.profiles?.username || 'Unknown',
-          avatar_url: m.profiles?.avatar_url || null,
-        }))
-      );
+      const parsedMembers = data.map((m: any) => ({
+        user_id: m.user_id,
+        role: m.role,
+        username: m.profiles?.username || 'Unknown',
+        avatar_url: m.profiles?.avatar_url || null,
+      }));
+      setMembers(parsedMembers);
+
+      // Fetch logs to calculate streaks
+      const memberIds = parsedMembers.map((m: any) => m.user_id);
+      const { data: logs } = await supabase
+        .from('workout_logs')
+        .select('user_id, logged_at')
+        .in('user_id', memberIds);
+
+      const streaks: Record<string, number> = {};
+      if (logs) {
+        memberIds.forEach((uid: string) => {
+          const userLogs = logs.filter((l: any) => l.user_id === uid);
+          const uniqueDates = new Set<string>(userLogs.map((l: any) => l.logged_at));
+          let streak = 0;
+          let restDayUsed = false;
+          const cursor = new Date();
+          const dayStr = (d: Date) => {
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+          };
+          if (!uniqueDates.has(dayStr(cursor))) cursor.setDate(cursor.getDate() - 1);
+          while (true) {
+            if (uniqueDates.has(dayStr(cursor))) {
+              streak++;
+              restDayUsed = false;
+              cursor.setDate(cursor.getDate() - 1);
+            } else if (!restDayUsed) {
+              restDayUsed = true;
+              cursor.setDate(cursor.getDate() - 1);
+            } else {
+              break;
+            }
+          }
+          streaks[uid] = streak;
+        });
+      }
+      setMemberStreaks(streaks);
     }
   };
 
@@ -1118,6 +1157,11 @@ function CirclesPageInner() {
                             )}
                           </button>
                           <span style={{ fontWeight: 500 }}>{m.username}</span>
+                          {memberStreaks[m.user_id] > 0 && (
+                            <span style={{ fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 4, background: 'rgba(249,115,22,0.1)', color: 'var(--accent-orange)', padding: '2px 8px', borderRadius: 12, fontWeight: 700 }}>
+                              🔥 {memberStreaks[m.user_id]}
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td>
@@ -1417,6 +1461,11 @@ function CirclesPageInner() {
                                   )}
                                 </button>
                                 <span style={{ fontWeight: 500 }}>{entry.username}</span>
+                                {memberStreaks[entry.user_id] > 0 && (
+                                  <span style={{ fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 4, background: 'rgba(249,115,22,0.1)', color: 'var(--accent-orange)', padding: '2px 8px', borderRadius: 12, fontWeight: 700 }}>
+                                    🔥 {memberStreaks[entry.user_id]}
+                                  </span>
+                                )}
                               </div>
                             </td>
                             <td>
@@ -1482,6 +1531,11 @@ function CirclesPageInner() {
                                   )}
                                 </button>
                                 <span style={{ fontWeight: 500 }}>{entry.username}</span>
+                                {memberStreaks[entry.user_id] > 0 && (
+                                  <span style={{ fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 4, background: 'rgba(249,115,22,0.1)', color: 'var(--accent-orange)', padding: '2px 8px', borderRadius: 12, fontWeight: 700 }}>
+                                    🔥 {memberStreaks[entry.user_id]}
+                                  </span>
+                                )}
                               </div>
                             </td>
                             <td>{entry.deadlift} kg</td>

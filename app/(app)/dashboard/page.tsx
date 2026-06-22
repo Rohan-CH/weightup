@@ -46,13 +46,17 @@ interface Stats {
   consistency30Days: string[];
 }
 
-interface RecentLog {
-  exerciseName: string;
-  weight: number;
+interface GroupedLog {
+  user_id: string;
   username: string;
   avatar_url: string | null;
-  user_id: string;
   timeAgo: string;
+  timestamp: number;
+  exercises: {
+    name: string;
+    weight: number;
+    isPR: boolean;
+  }[];
 }
 
 interface PersonalBest {
@@ -144,7 +148,7 @@ function StatDrawer({ title, children, onClose }: { title: string; children: Rea
 export default function DashboardPage() {
   const [charts, setCharts] = useState<ExerciseChart[]>([]);
   const [stats, setStats] = useState<Stats>({ totalLogs: 0, uniqueExercises: 0, bestLift: null, thisWeekLogs: 0, lastWeekLogs: 0, streak: 0, consistency30: 0, consistency30Days: [] });
-  const [recentLogs, setRecentLogs] = useState<RecentLog[]>([]);
+  const [recentLogs, setRecentLogs] = useState<GroupedLog[]>([]);
   const [profileModalUserId, setProfileModalUserId] = useState<string | null>(null);
   const [personalBests, setPersonalBests] = useState<PersonalBest[]>([]);
   const [leftMuscles, setLeftMuscles] = useState<MuscleKey[]>([]);
@@ -216,28 +220,79 @@ export default function DashboardPage() {
       try {
         const { data: latestLogs } = await supabase
           .from('workout_logs')
-          .select('user_id, weight_kg, created_at, exercises(name)')
+          .select('user_id, exercise_id, weight_kg, reps, created_at, logged_at, exercises(name)')
           .order('created_at', { ascending: false })
-          .limit(4);
+          .limit(30);
+
         if (latestLogs && latestLogs.length > 0) {
           const userIds = [...new Set(latestLogs.map((l: any) => l.user_id))];
+          const exerciseIds = [...new Set(latestLogs.map((l: any) => l.exercise_id))];
+          
           const { data: profiles } = await supabase.from('profiles').select('id, username, avatar_url').in('id', userIds);
           const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
-          const logsList = latestLogs.map((g: any) => {
-            const profile = profileMap.get(g.user_id) || {} as any;
-            const diff = Date.now() - new Date(g.created_at).getTime();
-            const m = Math.floor(diff / 60000), h = Math.floor(m / 60), d = Math.floor(h / 24);
-            const timeAgo = d > 0 ? `${d}d ago` : h > 0 ? `${h}h ago` : m > 0 ? `${m}m ago` : 'Just now';
-            return {
-              exerciseName: g.exercises?.name || 'Unknown',
-              weight: g.weight_kg,
-              username: profile.username || 'Unknown',
-              avatar_url: profile.avatar_url || null,
-              user_id: g.user_id,
-              timeAgo
-            };
+
+          // Fetch historical logs to check PRs
+          const thirtyDaysAgo = new Date();
+          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 60); // Check last 60 days for PRs to limit data size
+          const { data: historicalLogs } = await supabase
+            .from('workout_logs')
+            .select('user_id, exercise_id, weight_kg, created_at')
+            .in('user_id', userIds)
+            .in('exercise_id', exerciseIds)
+            .gte('created_at', thirtyDaysAgo.toISOString());
+
+          // Group by user and time window (e.g. 2 hours)
+          const groups: Record<string, GroupedLog> = {};
+
+          latestLogs.forEach((log: any) => {
+            const profile = profileMap.get(log.user_id) || {} as any;
+            // time bucket is roughly 2 hours
+            const bucketMs = 2 * 60 * 60 * 1000; 
+            const logTime = new Date(log.created_at).getTime();
+            const bucket = Math.floor(logTime / bucketMs);
+            const key = `${log.user_id}_${bucket}`;
+
+            let isPR = false;
+            if (historicalLogs) {
+              const prevMax = historicalLogs
+                .filter((hl: any) => hl.user_id === log.user_id && hl.exercise_id === log.exercise_id && new Date(hl.created_at).getTime() < logTime)
+                .reduce((max: number, hl: any) => Math.max(max, hl.weight_kg), 0);
+              if (log.weight_kg > prevMax && prevMax > 0) {
+                isPR = true;
+              }
+            }
+
+            if (!groups[key]) {
+              const diff = Date.now() - logTime;
+              const m = Math.floor(diff / 60000), h = Math.floor(m / 60), d = Math.floor(h / 24);
+              const timeAgo = d > 0 ? `${d}d ago` : h > 0 ? `${h}h ago` : m > 0 ? `${m}m ago` : 'Just now';
+              groups[key] = {
+                user_id: log.user_id,
+                username: profile.username || 'Unknown',
+                avatar_url: profile.avatar_url || null,
+                timeAgo,
+                timestamp: logTime,
+                exercises: []
+              };
+            }
+            
+            // avoid duplicates if same exercise logged multiple times in window
+            const existingEx = groups[key].exercises.find(e => e.name === log.exercises?.name);
+            if (existingEx) {
+              if (log.weight_kg > existingEx.weight) {
+                existingEx.weight = log.weight_kg;
+                existingEx.isPR = existingEx.isPR || isPR;
+              }
+            } else {
+              groups[key].exercises.push({
+                name: log.exercises?.name || 'Unknown',
+                weight: log.weight_kg,
+                isPR
+              });
+            }
           });
-          setRecentLogs(logsList);
+
+          setRecentLogs(Object.values(groups).sort((a, b) => b.timestamp - a.timestamp));
         }
       } catch (e) { console.error(e); }
 
@@ -1075,37 +1130,73 @@ export default function DashboardPage() {
           {recentLogs.map((log, idx) => (
             <div key={idx} style={{
               display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 14,
+              flexDirection: 'column',
+              gap: 8,
               background: theme === 'light' ? 'rgba(0,0,0,0.015)' : 'rgba(255,255,255,0.015)',
               border: '1px solid var(--border-color)',
               borderRadius: 12,
-              padding: '12px 16px',
-              cursor: 'pointer'
-            }} onClick={() => router.push('/circles')}>
-              <div>
-                <h4 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 2px 0' }}>{log.exerciseName} <span style={{ color: 'var(--accent-cyan)' }}>• {log.weight}kg</span></h4>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)' }}>
+              padding: '16px',
+            }}>
+              {/* Header: User & Time */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <button 
                     type="button" 
                     style={{ padding: 0, margin: 0, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                     onClick={(e) => { e.stopPropagation(); setProfileModalUserId(log.user_id); }}
                   >
                     {log.avatar_url ? (
-                      <img src={log.avatar_url} alt="" style={{ width: 16, height: 16, borderRadius: '50%', objectFit: 'cover' }} />
+                      <img src={log.avatar_url} alt="" style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover' }} />
                     ) : (
-                      <div style={{ width: 16, height: 16, borderRadius: '50%', background: 'var(--accent-purple)', opacity: 0.5, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 10 }}>
+                      <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'linear-gradient(135deg, var(--accent-cyan), var(--accent-purple))', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 12, fontWeight: 700 }}>
                         {log.username.charAt(0).toUpperCase()}
                       </div>
                     )}
                   </button>
-                  <span style={{ fontWeight: 600 }}>{log.username}</span>
-                  <span>•</span>
-                  <span>{log.timeAgo}</span>
+                  <div>
+                    <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: 14 }}>{log.username}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{log.timeAgo}</div>
+                  </div>
                 </div>
+                <button 
+                  onClick={() => router.push('/circles')}
+                  style={{ background: 'transparent', border: 'none', color: 'var(--accent-purple)', cursor: 'pointer', padding: 4 }}
+                >
+                  <ArrowRight size={16} />
+                </button>
               </div>
-              <ArrowRight size={14} style={{ color: 'var(--accent-purple)' }} />
+
+              {/* Exercises List */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingLeft: 32 }}>
+                {log.exercises.slice(0, 4).map((ex, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13 }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>{ex.name}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {ex.isPR && (
+                        <span style={{ 
+                          fontSize: 10, 
+                          fontWeight: 700, 
+                          color: '#fbbf24', 
+                          background: 'rgba(251,191,36,0.1)', 
+                          padding: '2px 6px', 
+                          borderRadius: 4,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 3
+                        }}>
+                          <Trophy size={10} /> PR
+                        </span>
+                      )}
+                      <span style={{ fontWeight: 600, color: 'var(--accent-cyan)' }}>{ex.weight}kg</span>
+                    </div>
+                  </div>
+                ))}
+                {log.exercises.length > 4 && (
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic', marginTop: 2 }}>
+                    +{log.exercises.length - 4} more exercises
+                  </div>
+                )}
+              </div>
             </div>
           ))}
           {recentLogs.length === 0 && (
