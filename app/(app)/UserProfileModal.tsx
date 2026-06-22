@@ -13,6 +13,7 @@ interface UserProfileModalProps {
 interface UserProfileData {
   username: string;
   avatar_url: string | null;
+  is_in_recovery: boolean;
   stats: {
     totalLogs: number;
     uniqueExercises: number;
@@ -32,7 +33,7 @@ export default function UserProfileModal({ userId, onClose }: UserProfileModalPr
       // Fetch profile
       const { data: profile } = await supabase
         .from('profiles')
-        .select('username, avatar_url')
+        .select('username, avatar_url, is_in_recovery')
         .eq('id', userId)
         .single();
 
@@ -102,6 +103,7 @@ export default function UserProfileModal({ userId, onClose }: UserProfileModalPr
       setData({
         username: profile.username,
         avatar_url: profile.avatar_url,
+        is_in_recovery: profile.is_in_recovery || false,
         stats: { totalLogs, uniqueExercises, totalDays, streak: streak || 0 },
         topExercises,
       });
@@ -183,8 +185,13 @@ export default function UserProfileModal({ userId, onClose }: UserProfileModalPr
                   </div>
                 )}
               </div>
-              <h2 style={{ fontSize: 28, fontWeight: 800, margin: '0 0 8px', color: 'var(--text-primary)', letterSpacing: '-0.5px' }}>
+              <h2 style={{ fontSize: 28, fontWeight: 800, margin: '0 0 8px', color: 'var(--text-primary)', letterSpacing: '-0.5px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
                 {data.username}
+                {data.is_in_recovery && (
+                  <span style={{ fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 4, background: 'rgba(168, 85, 247, 0.1)', color: 'var(--accent-purple)', padding: '2px 8px', borderRadius: 12, fontWeight: 600 }}>
+                    🩹 In Recovery
+                  </span>
+                )}
               </h2>
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 14px', background: 'rgba(255,255,255,0.05)', backdropFilter: 'blur(4px)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 24, fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600 }}>
                 <span style={{ fontSize: 14 }}>🔒</span> Private Stats

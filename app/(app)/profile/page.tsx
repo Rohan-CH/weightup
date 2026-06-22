@@ -10,6 +10,7 @@ interface Profile {
   avatar_url: string | null;
   height_cm: number | null;
   created_at: string;
+  is_in_recovery?: boolean;
 }
 
 interface BodyMetric {
@@ -46,6 +47,7 @@ export default function ProfilePage() {
   const [username, setUsername] = useState('');
   const [height, setHeight] = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [isInRecovery, setIsInRecovery] = useState(false);
   const [stats, setStats] = useState<PersonalStats>({ totalLogs: 0, uniqueExercises: 0, totalDays: 0, streak: 0 });
   const [bodyMetrics, setBodyMetrics] = useState<BodyMetric[]>([]);
   const [newWeight, setNewWeight] = useState('');
@@ -93,7 +95,7 @@ export default function ProfilePage() {
 
     const { data } = await supabase
       .from('profiles')
-      .select('username, avatar_url, height_cm, created_at')
+      .select('username, avatar_url, height_cm, created_at, is_in_recovery')
       .eq('id', user.id)
       .single();
 
@@ -102,6 +104,7 @@ export default function ProfilePage() {
       setUsername(data.username);
       setHeight(data.height_cm ? data.height_cm.toString() : '');
       setAvatarUrl(data.avatar_url);
+      setIsInRecovery(data.is_in_recovery || false);
     }
     
     // Fetch body metrics
@@ -291,7 +294,8 @@ export default function ProfilePage() {
       .from('profiles')
       .update({ 
         username: username.trim(),
-        height_cm: height ? parseFloat(height) : null
+        height_cm: height ? parseFloat(height) : null,
+        is_in_recovery: isInRecovery
       })
       .eq('id', user.id);
 
@@ -375,14 +379,14 @@ export default function ProfilePage() {
         {/* Fatigue Card */}
         <div className="card">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <Activity size={18} style={{ color: fatigue.color }} />
+            <Activity size={18} style={{ color: profile?.is_in_recovery ? 'var(--accent-purple)' : fatigue.color }} />
             <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Systemic Fatigue</h3>
           </div>
-          <div style={{ fontSize: 24, fontWeight: 800, color: fatigue.color }}>
-            {fatigue.label}
+          <div style={{ fontSize: 24, fontWeight: 800, color: profile?.is_in_recovery ? 'var(--accent-purple)' : fatigue.color }}>
+            {profile?.is_in_recovery ? 'In Recovery 🩹' : fatigue.label}
           </div>
           <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
-            Acute:Chronic Workload Ratio ({fatigue.score.toFixed(2)})
+            {profile?.is_in_recovery ? 'Rest up and heal well!' : `Acute:Chronic Workload Ratio (${fatigue.score.toFixed(2)})`}
           </p>
         </div>
 
@@ -514,7 +518,14 @@ export default function ProfilePage() {
                 style={{ display: 'none' }}
               />
             </div>
-            <h2 style={{ fontSize: 20, fontWeight: 700 }}>{profile?.username}</h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <h2 style={{ fontSize: 20, fontWeight: 700 }}>{profile?.username}</h2>
+              {profile?.is_in_recovery && (
+                <span style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4, background: 'rgba(168, 85, 247, 0.1)', color: 'var(--accent-purple)', padding: '2px 8px', borderRadius: 12, fontWeight: 600 }}>
+                  🩹 In Recovery
+                </span>
+              )}
+            </div>
             <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
               Member since {new Date(profile?.created_at || '').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
             </p>
@@ -530,7 +541,7 @@ export default function ProfilePage() {
             />
           </div>
           
-          <div className="form-group">
+          <div className="form-group" style={{ marginBottom: 16 }}>
             <label className="label">Height (cm)</label>
             <input
               className="input"
@@ -539,6 +550,20 @@ export default function ProfilePage() {
               onChange={(e) => setHeight(e.target.value)}
               placeholder="e.g. 180"
             />
+          </div>
+
+          <div className="form-group" style={{ marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12, background: 'var(--bg-secondary)', padding: '12px 16px', borderRadius: 8 }}>
+            <input
+              type="checkbox"
+              id="recovery-toggle"
+              checked={isInRecovery}
+              onChange={(e) => setIsInRecovery(e.target.checked)}
+              style={{ width: 18, height: 18, accentColor: 'var(--accent-purple)', cursor: 'pointer' }}
+            />
+            <label htmlFor="recovery-toggle" style={{ margin: 0, fontWeight: 500, cursor: 'pointer', display: 'flex', flexDirection: 'column' }}>
+              <span>Recovery Mode 🩹</span>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 400 }}>Mute fatigue warnings while you rest and heal.</span>
+            </label>
           </div>
 
           {error && <p className="error-text" style={{ marginBottom: 12 }}>{error}</p>}

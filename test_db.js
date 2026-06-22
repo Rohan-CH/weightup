@@ -5,5 +5,5 @@ const env = fs.readFileSync('.env.local', 'utf8').split('\n').reduce((acc, line)
   if (k) acc[k.trim()] = v.trim();
   return acc;
 }, {});
-const sb = createClient(env['NEXT_PUBLIC_SUPABASE_URL'], env['NEXT_PUBLIC_SUPABASE_ANON_KEY']);
-sb.from('profiles').select('*').limit(1).then(console.log);
+const sb = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+sb.from('profiles').select('*').limit(1).then(res => console.log(Object.keys(res.data[0] || {})));

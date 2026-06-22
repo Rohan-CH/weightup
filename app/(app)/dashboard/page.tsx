@@ -167,6 +167,7 @@ export default function DashboardPage() {
   const [recentMilestones, setRecentMilestones] = useState<Milestone[]>([]);
   const [hoveredDay, setHoveredDay] = useState<{ date: string; count: number; x: number; y: number } | null>(null);
   const [dailyLogCounts, setDailyLogCounts] = useState<Record<string, number>>({});
+  const [weeklyVolume, setWeeklyVolume] = useState<number>(0);
   
   // Direct logging popup state
   const [logPopupExercise, setLogPopupExercise] = useState<{ id: string; name: string; targetMuscles?: string[] | null } | null>(null);
@@ -218,9 +219,13 @@ export default function DashboardPage() {
 
       // Recent global logs
       try {
+        const fortyEightHoursAgo = new Date();
+        fortyEightHoursAgo.setHours(fortyEightHoursAgo.getHours() - 48);
+
         const { data: latestLogs } = await supabase
           .from('workout_logs')
           .select('user_id, exercise_id, weight_kg, reps, created_at, logged_at, exercises(name)')
+          .gte('created_at', fortyEightHoursAgo.toISOString())
           .order('created_at', { ascending: false })
           .limit(30);
 
@@ -292,7 +297,24 @@ export default function DashboardPage() {
             }
           });
 
-          setRecentLogs(Object.values(groups).sort((a, b) => b.timestamp - a.timestamp));
+          // Fetch weekly volume for the current user
+        const volumeDaysAgo = new Date();
+        volumeDaysAgo.setDate(volumeDaysAgo.getDate() - 7);
+        const { data: volumeLogs } = await supabase
+          .from('workout_logs')
+          .select('weight_kg, reps')
+          .eq('user_id', user.id)
+          .gte('logged_at', volumeDaysAgo.toISOString().split('T')[0]);
+        
+        let vol = 0;
+        if (volumeLogs) {
+          volumeLogs.forEach((l: any) => {
+            vol += (l.weight_kg || 0) * (l.reps || 0);
+          });
+        }
+        setWeeklyVolume(vol);
+
+        setRecentLogs(Object.values(groups).sort((a, b) => b.timestamp - a.timestamp));
         }
       } catch (e) { console.error(e); }
 
@@ -866,6 +888,58 @@ export default function DashboardPage() {
           {stats.bestLift && <div className="stat-delta neutral" style={{ color: 'var(--text-secondary)' }}>{stats.bestLift.name}</div>}
         </button>
       </div>
+
+      {/* 🐘 Fun Volume Card */}
+      {weeklyVolume > 0 && (() => {
+        const getEquivalent = (v: number) => {
+          if (v < 50) return { name: 'a microwave', icon: '📦', color: '#a1a1aa' };
+          if (v < 200) return { name: 'a baby hippo', icon: '🦛', color: '#f472b6' };
+          if (v < 500) return { name: 'a grizzly bear', icon: '🐻', color: '#fb923c' };
+          if (v < 1000) return { name: 'a grand piano', icon: '🎹', color: '#a78bfa' };
+          if (v < 2500) return { name: 'a small car', icon: '🚗', color: '#38bdf8' };
+          if (v < 6000) return { name: 'an African elephant', icon: '🐘', color: '#4ade80' };
+          if (v < 15000) return { name: 'a T-Rex', icon: '🦖', color: '#facc15' };
+          return { name: 'an F-16 fighter jet', icon: '✈️', color: '#f87171' };
+        };
+        const eq = getEquivalent(weeklyVolume);
+        
+        return (
+          <div className="card dash-volume-card" style={{
+            marginBottom: 28,
+            padding: 20,
+            borderRadius: 'var(--radius-lg)',
+            background: theme === 'light' 
+              ? `linear-gradient(135deg, rgba(255,255,255,0.95), rgba(245,245,255,0.95))` 
+              : `linear-gradient(135deg, rgba(20,20,30,0.9), rgba(10,10,18,0.9))`,
+            border: `1px solid ${eq.color}40`,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 20,
+            boxShadow: `0 8px 32px -8px ${eq.color}30`,
+            animation: 'fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both',
+            position: 'relative',
+            overflow: 'hidden'
+          }}>
+            {/* Background glow */}
+            <div style={{ position: 'absolute', right: -40, top: -40, width: 150, height: 150, background: eq.color, filter: 'blur(80px)', opacity: 0.15, borderRadius: '50%', zIndex: 0 }} />
+            
+            <div style={{ fontSize: 48, filter: `drop-shadow(0 4px 12px ${eq.color}60)`, zIndex: 1, animation: 'bounce 2s infinite ease-in-out' }}>
+              {eq.icon}
+            </div>
+            <div style={{ zIndex: 1 }}>
+              <div style={{ fontSize: 13, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600 }}>
+                Weekly Volume
+              </div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 2 }}>
+                <CountUp value={weeklyVolume} /> kg
+              </div>
+              <div style={{ fontSize: 15, color: 'var(--text-secondary)' }}>
+                That's equivalent to lifting <span style={{ color: eq.color, fontWeight: 700 }}>{eq.name}</span>!
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* 📅 30-Day Consistency Card */}
       <div className="card animate-fade-in-up" style={{
