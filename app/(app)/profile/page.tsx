@@ -95,7 +95,7 @@ export default function ProfilePage() {
 
     const { data } = await supabase
       .from('profiles')
-      .select('username, avatar_url, height_cm, created_at, is_in_recovery')
+      .select('*')
       .eq('id', user.id)
       .single();
 

@@ -33,7 +33,7 @@ export default function UserProfileModal({ userId, onClose }: UserProfileModalPr
       // Fetch profile
       const { data: profile } = await supabase
         .from('profiles')
-        .select('username, avatar_url, is_in_recovery')
+        .select('*')
         .eq('id', userId)
         .single();
 
