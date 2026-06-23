@@ -864,50 +864,97 @@ export default function DashboardPage() {
 
       {/* 🐘 Fun Volume Card */}
       {weeklyVolume > 0 && (() => {
-        const getEquivalent = (v: number) => {
-          if (v < 50) return { name: 'a microwave', icon: '📦', color: '#a1a1aa' };
-          if (v < 200) return { name: 'a baby hippo', icon: '🦛', color: '#f472b6' };
-          if (v < 500) return { name: 'a grizzly bear', icon: '🐻', color: '#fb923c' };
-          if (v < 1000) return { name: 'a grand piano', icon: '🎹', color: '#a78bfa' };
-          if (v < 2500) return { name: 'a small car', icon: '🚗', color: '#38bdf8' };
-          if (v < 6000) return { name: 'an African elephant', icon: '🐘', color: '#4ade80' };
-          if (v < 15000) return { name: 'a T-Rex', icon: '🦖', color: '#facc15' };
-          return { name: 'an F-16 fighter jet', icon: '✈️', color: '#f87171' };
-        };
-        const eq = getEquivalent(weeklyVolume);
-        
+        const TIERS = [
+          { ceil: 50,       name: 'a microwave',          icon: '📦', color: '#a1a1aa' },
+          { ceil: 200,      name: 'a baby hippo',         icon: '🦛', color: '#f472b6' },
+          { ceil: 500,      name: 'a grizzly bear',       icon: '🐻', color: '#fb923c' },
+          { ceil: 1000,     name: 'a grand piano',        icon: '🎹', color: '#a78bfa' },
+          { ceil: 2500,     name: 'a small car',          icon: '🚗', color: '#38bdf8' },
+          { ceil: 6000,     name: 'an African elephant',  icon: '🐘', color: '#4ade80' },
+          { ceil: 15000,    name: 'a T-Rex',              icon: '🦖', color: '#facc15' },
+          { ceil: Infinity, name: 'an F-16 fighter jet',  icon: '✈️', color: '#f87171' },
+        ];
+        const idx = TIERS.findIndex(t => weeklyVolume < t.ceil);
+        const eq = TIERS[idx];
+        const next = TIERS[idx + 1];
+        const prevCeil = idx === 0 ? 0 : TIERS[idx - 1].ceil;
+        const hasNext = !!next && eq.ceil !== Infinity;
+        const progress = hasNext
+          ? Math.min(100, Math.max(4, Math.round(((weeklyVolume - prevCeil) / (eq.ceil - prevCeil)) * 100)))
+          : 100;
+        const toNext = hasNext ? Math.max(1, Math.ceil(eq.ceil - weeklyVolume)) : 0;
+
         return (
           <div className="card dash-volume-card" style={{
             marginBottom: 28,
             padding: 20,
             borderRadius: 'var(--radius-lg)',
-            background: theme === 'light' 
-              ? `linear-gradient(135deg, rgba(255,255,255,0.95), rgba(245,245,255,0.95))` 
+            background: theme === 'light'
+              ? `linear-gradient(135deg, rgba(255,255,255,0.95), rgba(245,245,255,0.95))`
               : `linear-gradient(135deg, rgba(20,20,30,0.9), rgba(10,10,18,0.9))`,
             border: `1px solid ${eq.color}40`,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 20,
             boxShadow: `0 8px 32px -8px ${eq.color}30`,
             animation: 'fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both',
             position: 'relative',
             overflow: 'hidden'
           }}>
             {/* Background glow */}
-            <div style={{ position: 'absolute', right: -40, top: -40, width: 150, height: 150, background: eq.color, filter: 'blur(80px)', opacity: 0.15, borderRadius: '50%', zIndex: 0 }} />
-            
-            <div style={{ fontSize: 48, filter: `drop-shadow(0 4px 12px ${eq.color}60)`, zIndex: 1, animation: 'bounce 2s infinite ease-in-out' }}>
-              {eq.icon}
+            <div style={{ position: 'absolute', right: -40, top: -40, width: 150, height: 150, background: eq.color, filter: 'blur(80px)', opacity: 0.18, borderRadius: '50%', zIndex: 0 }} />
+            {/* Light sheen sweeping across the card */}
+            <div className="dash-volume-sheen" style={{
+              position: 'absolute', top: 0, bottom: 0, left: 0, width: '40%', zIndex: 1,
+              background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.10), transparent)',
+              pointerEvents: 'none',
+            }} />
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 20, position: 'relative', zIndex: 2 }}>
+              {/* Icon with pulsing halo */}
+              <div style={{ position: 'relative', flexShrink: 0 }}>
+                <div className="dash-volume-halo" style={{
+                  position: 'absolute', inset: -10, borderRadius: '50%',
+                  background: eq.color, opacity: 0.25, filter: 'blur(14px)',
+                }} />
+                <div style={{ fontSize: 48, lineHeight: 1, filter: `drop-shadow(0 4px 12px ${eq.color}60)`, position: 'relative', animation: 'float 2.6s infinite ease-in-out' }}>
+                  {eq.icon}
+                </div>
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600 }}>
+                  Weekly Volume
+                </div>
+                <div style={{ marginBottom: 2, display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                  <span style={{
+                    fontSize: 34, fontWeight: 900, letterSpacing: '-1px',
+                    background: `linear-gradient(135deg, ${eq.color}, var(--text-primary))`,
+                    WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent',
+                  }}>
+                    <CountUp value={weeklyVolume} />
+                  </span>
+                  <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-secondary)' }}>kg</span>
+                </div>
+                <div style={{ fontSize: 15, color: 'var(--text-secondary)' }}>
+                  That&apos;s like lifting <span style={{ color: eq.color, fontWeight: 700 }}>{eq.name}</span> {eq.icon}
+                </div>
+              </div>
             </div>
-            <div style={{ zIndex: 1 }}>
-              <div style={{ fontSize: 13, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600 }}>
-                Weekly Volume
+
+            {/* Progress toward the next tier */}
+            <div style={{ position: 'relative', zIndex: 2, marginTop: 16 }}>
+              <div style={{
+                height: 8, borderRadius: 999, overflow: 'hidden',
+                background: theme === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)',
+              }}>
+                <div className="dash-volume-fill" style={{
+                  width: `${progress}%`, height: '100%', borderRadius: 999,
+                  transformOrigin: 'left center',
+                  background: `linear-gradient(90deg, ${eq.color}, ${(next || eq).color})`,
+                  boxShadow: `0 0 10px ${eq.color}90`,
+                }} />
               </div>
-              <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 2 }}>
-                <CountUp value={weeklyVolume} /> kg
-              </div>
-              <div style={{ fontSize: 15, color: 'var(--text-secondary)' }}>
-                That's equivalent to lifting <span style={{ color: eq.color, fontWeight: 700 }}>{eq.name}</span>!
+              <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 8, fontWeight: 600 }}>
+                {hasNext
+                  ? <>Only <span style={{ color: 'var(--text-secondary)', fontWeight: 800 }}>{toNext.toLocaleString()} kg</span> until you&apos;re hoisting {next.name} {next.icon}</>
+                  : <>🏆 Top tier reached — nothing heavier left to lift!</>}
               </div>
             </div>
           </div>
@@ -927,34 +974,58 @@ export default function DashboardPage() {
         overflow: 'hidden',
         maxWidth: '100%',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-          <Activity size={18} style={{ color: 'var(--accent-cyan)' }} />
-          <div>
-            <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>30-Day Consistency</h3>
-          </div>
-          <div style={{ marginLeft: 'auto', fontSize: 18, fontWeight: 800, color: 'var(--accent-cyan)' }}>
-            {stats.consistency30}%
-          </div>
-        </div>
+        {(() => {
+          const activeCount = stats.consistency30Days.filter(s => s === 'active').length;
+          return (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 34, height: 34, borderRadius: 10, background: 'rgba(0,245,255,0.12)', flexShrink: 0 }}>
+                  <Activity size={18} style={{ color: 'var(--accent-cyan)' }} />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>30-Day Consistency</h3>
+                  <div style={{ fontSize: 12.5, color: 'var(--text-muted)', fontWeight: 600, marginTop: 2 }}>
+                    {activeCount} of 30 days active
+                  </div>
+                </div>
+                <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
+                  <span style={{
+                    fontSize: 26, fontWeight: 900, letterSpacing: '-1px',
+                    background: 'linear-gradient(135deg, var(--accent-cyan), var(--accent-purple))',
+                    WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent',
+                  }}>
+                    {stats.consistency30}<span style={{ fontSize: 15 }}>%</span>
+                  </span>
+                </div>
+              </div>
 
-        <div style={{ display: 'flex', gap: 4, overflowX: 'auto', paddingBottom: 8 }} className="no-scrollbar">
-          {stats.consistency30Days.map((status, idx) => (
-            <div
-              key={idx}
-              title={status === 'active' ? 'Workout completed' : 'Rest day'}
-              style={{
-                flex: 1,
-                minWidth: 4,
-                height: 32,
-                borderRadius: 4,
-                background: status === 'active' ? 'var(--accent-cyan)' : (theme === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.04)'),
-                opacity: status === 'active' ? 1 : 0.6,
-                boxShadow: status === 'active' ? '0 0 8px rgba(0, 245, 255, 0.3)' : 'none',
-                transition: 'opacity 0.2s',
-              }}
-            />
-          ))}
-        </div>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 44 }} className="no-scrollbar">
+                {stats.consistency30Days.map((status, i) => {
+                  const active = status === 'active';
+                  return (
+                    <div
+                      key={i}
+                      className="dash-consistency-bar"
+                      title={`${active ? 'Workout completed' : 'Rest day'} — ${30 - i} day${30 - i === 1 ? '' : 's'} ago`}
+                      style={{
+                        flex: 1,
+                        minWidth: 3,
+                        height: active ? '100%' : '34%',
+                        borderRadius: 999,
+                        transformOrigin: 'bottom center',
+                        animationDelay: `${i * 22}ms`,
+                        background: active
+                          ? 'linear-gradient(180deg, var(--accent-cyan), var(--accent-purple))'
+                          : (theme === 'light' ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.06)'),
+                        boxShadow: active ? '0 0 10px rgba(0, 245, 255, 0.45)' : 'none',
+                      }}
+                    />
+                  );
+                })}
+              </div>
+            </>
+          );
+        })()}
       </div>
 
       <div className="dash-bento-grid">

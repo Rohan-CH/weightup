@@ -765,6 +765,34 @@
   to { transform: translate(-50%, -50%) scale(30); opacity: 0; }
 }
 
+/* ---- Weekly volume card flourishes (all transform/opacity = GPU-cheap) ---- */
+.dash-volume-sheen {
+  animation: sheenSweep 5s ease-in-out 1.2s infinite;
+}
+.dash-volume-halo {
+  animation: haloPulse 2.8s ease-in-out infinite;
+}
+.dash-volume-fill {
+  animation: barFillX 1.1s cubic-bezier(0.16, 1, 0.3, 1) 0.35s both;
+}
+
+/* ---- 30-day consistency bars: one-shot staggered grow-in ---- */
+.dash-consistency-bar {
+  animation: growBar 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  transition: transform 0.18s ease;
+}
+.dash-consistency-bar:hover {
+  transform: scaleY(1.06);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dash-volume-sheen { animation: none; opacity: 0; }
+  .dash-volume-halo  { animation: none; }
+  .dash-volume-fill,
+  .dash-consistency-bar { animation: none; }
+  .dash-consistency-bar:hover { transform: none; }
+}
+
 .stat-delta {
   display: inline-flex;
   align-items: center;

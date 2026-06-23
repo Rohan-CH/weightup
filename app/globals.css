@@ -156,6 +156,37 @@ body {
   to { transform: rotate(360deg); }
 }
 
+/* Subtle idle "breathing" for the muscle mannequin — transform-only
+   (compositor-friendly, no layout/paint), so it's effectively free. */
+@keyframes muscleBreathe {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50%      { transform: translateY(-5px) scale(1.012); }
+}
+
+/* Diagonal light sheen that sweeps across a card. */
+@keyframes sheenSweep {
+  0%   { transform: translateX(-150%) skewX(-20deg); }
+  100% { transform: translateX(250%) skewX(-20deg); }
+}
+
+/* One-shot grow-from-bottom for the consistency bars. */
+@keyframes growBar {
+  from { transform: scaleY(0.15); opacity: 0; }
+  to   { transform: scaleY(1); opacity: 1; }
+}
+
+/* One-shot left-to-right fill for the weekly-volume progress bar. */
+@keyframes barFillX {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+/* Soft breathing glow behind the weekly-volume icon. */
+@keyframes haloPulse {
+  0%, 100% { opacity: 0.18; transform: scale(1); }
+  50%      { opacity: 0.38; transform: scale(1.12); }
+}
+
 .animate-fade-in-up {
   animation: fadeInUp 0.5s ease forwards;
 }
@@ -647,6 +678,20 @@ tbody tr:hover {
 
 .muscles-diagrams svg {
   overflow: visible !important;
+  transform-origin: center center;
+  animation: muscleBreathe 4.5s ease-in-out infinite;
+  will-change: transform;
+}
+
+/* Front and back breathe slightly out of phase so the figure feels alive
+   rather than mechanically synced. Robust to the optional <style> node that
+   may precede the wraps, so we key off the FRONT/BACK label order instead. */
+.muscles-diagram-wrap:last-of-type svg {
+  animation-delay: -2.25s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .muscles-diagrams svg { animation: none; }
 }
 
 @keyframes svgPulseGlow {
