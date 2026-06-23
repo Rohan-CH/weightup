@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Model from 'react-body-highlighter';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
@@ -141,8 +141,8 @@ export default function MusclesPage() {
     fetch();
   }, [weekStart]);
 
-  // Compute sets per muscle group
-  const muscleWork = (() => {
+  // Compute sets per muscle group (recomputed only when logs change).
+  const muscleWork = useMemo(() => {
     const totals: Partial<Record<MuscleKey, number>> = {};
     logs.forEach(log => {
       const name = log.exercises?.name ?? '';
@@ -150,10 +150,10 @@ export default function MusclesPage() {
       muscles.forEach(m => { totals[m] = (totals[m] ?? 0) + 1; });
     });
     return totals;
-  })();
+  }, [logs]);
 
-  // Exercises worked this week
-  const exerciseMap = (() => {
+  // Exercises worked this week (recomputed only when logs change).
+  const exerciseMap = useMemo(() => {
     const map: Record<string, { name: string; sets: number; muscles: MuscleKey[] }> = {};
     logs.forEach(log => {
       const name = log.exercises?.name ?? 'Unknown';
@@ -164,7 +164,7 @@ export default function MusclesPage() {
       map[log.exercise_id].sets++;
     });
     return Object.values(map).sort((a, b) => b.sets - a.sets);
-  })();
+  }, [logs]);
 
   const workedMuscles = Object.entries(muscleWork)
     .filter(([, sets]) => sets > 0)

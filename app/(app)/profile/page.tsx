@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { computeStreak, dayStr } from '@/lib/metrics';
 import { Camera, Save, User, Dumbbell, Trophy, Calendar, Activity, Download } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -135,29 +136,7 @@ export default function ProfilePage() {
       const uniqueDates = new Set<string>(logs.map((l: any) => l.logged_at));
       const uniqueDays = uniqueDates.size;
       
-      let streak = 0;
-      let restDayUsed = false;
-      const cursor = new Date();
-      const dayStr = (d: Date) => {
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return `${y}-${m}-${day}`;
-      };
-      
-      if (!uniqueDates.has(dayStr(cursor))) cursor.setDate(cursor.getDate() - 1);
-      while (true) {
-        if (uniqueDates.has(dayStr(cursor))) {
-          streak++;
-          restDayUsed = false;
-          cursor.setDate(cursor.getDate() - 1);
-        } else if (!restDayUsed) {
-          restDayUsed = true;
-          cursor.setDate(cursor.getDate() - 1);
-        } else {
-          break;
-        }
-      }
+      const streak = computeStreak(uniqueDates);
 
       setStats({
         totalLogs: logs.length,

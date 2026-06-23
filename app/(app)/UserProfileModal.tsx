@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { createClient } from '@/lib/supabase/client';
+import { computeStreak } from '@/lib/metrics';
 import { X, Dumbbell, Activity, Calendar, Trophy } from 'lucide-react';
 
 interface UserProfileModalProps {
@@ -61,28 +62,7 @@ export default function UserProfileModal({ userId, onClose }: UserProfileModalPr
         const uniqueDates = new Set<string>(logs.map((l: any) => l.logged_at));
         totalDays = uniqueDates.size;
 
-        let restDayUsed = false;
-        const cursor = new Date();
-        const dayStr = (d: Date) => {
-          const y = d.getFullYear();
-          const m = String(d.getMonth() + 1).padStart(2, '0');
-          const day = String(d.getDate()).padStart(2, '0');
-          return `${y}-${m}-${day}`;
-        };
-        
-        if (!uniqueDates.has(dayStr(cursor))) cursor.setDate(cursor.getDate() - 1);
-        while (true) {
-          if (uniqueDates.has(dayStr(cursor))) {
-            streak++;
-            restDayUsed = false;
-            cursor.setDate(cursor.getDate() - 1);
-          } else if (!restDayUsed) {
-            restDayUsed = true;
-            cursor.setDate(cursor.getDate() - 1);
-          } else {
-            break;
-          }
-        }
+        streak = computeStreak(uniqueDates);
 
         // Calculate top exercises
         const exCounts: Record<string, { name: string; count: number }> = {};

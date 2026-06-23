@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { computeStreak, dayStr, roundedOneRepMax, STREAK_WINDOW_DAYS } from '@/lib/metrics';
 import {
   Users,
   Plus,
@@ -306,41 +307,24 @@ function CirclesPageInner() {
       }));
       setMembers(parsedMembers);
 
-      // Fetch logs to calculate streaks
+      // Fetch logs to calculate streaks. Bound to a trailing window so we
+      // don't pull every member's entire history just to render a badge —
+      // a rest-day-tolerant streak can't span more days than the window.
       const memberIds = parsedMembers.map((m: any) => m.user_id);
+      const streakWindow = new Date();
+      streakWindow.setDate(streakWindow.getDate() - STREAK_WINDOW_DAYS);
       const { data: logs } = await supabase
         .from('workout_logs')
         .select('user_id, logged_at')
-        .in('user_id', memberIds);
+        .in('user_id', memberIds)
+        .gte('logged_at', dayStr(streakWindow));
 
       const streaks: Record<string, number> = {};
       if (logs) {
         memberIds.forEach((uid: string) => {
           const userLogs = logs.filter((l: any) => l.user_id === uid);
           const uniqueDates = new Set<string>(userLogs.map((l: any) => l.logged_at));
-          let streak = 0;
-          let restDayUsed = false;
-          const cursor = new Date();
-          const dayStr = (d: Date) => {
-            const y = d.getFullYear();
-            const m = String(d.getMonth() + 1).padStart(2, '0');
-            const day = String(d.getDate()).padStart(2, '0');
-            return `${y}-${m}-${day}`;
-          };
-          if (!uniqueDates.has(dayStr(cursor))) cursor.setDate(cursor.getDate() - 1);
-          while (true) {
-            if (uniqueDates.has(dayStr(cursor))) {
-              streak++;
-              restDayUsed = false;
-              cursor.setDate(cursor.getDate() - 1);
-            } else if (!restDayUsed) {
-              restDayUsed = true;
-              cursor.setDate(cursor.getDate() - 1);
-            } else {
-              break;
-            }
-          }
-          streaks[uid] = streak;
+          streaks[uid] = computeStreak(uniqueDates);
         });
       }
       setMemberStreaks(streaks);
@@ -481,21 +465,22 @@ function CirclesPageInner() {
     setFeedLoading(true);
     const memberIds = members.map((m) => m.user_id);
 
-    // 1. Fetch recent logs by members
-    const { data: recentLogs } = await supabase
-      .from('workout_logs')
-      .select('id, user_id, exercise_id, weight_kg, reps, logged_at, created_at, exercises(name), profiles(username, avatar_url)')
-      .in('user_id', memberIds)
-      .order('created_at', { ascending: false })
-      .limit(50);
-
-    // 2. Fetch recent comments by members
-    const { data: recentComments } = await supabase
-      .from('comments')
-      .select('log_id, created_at')
-      .in('user_id', memberIds)
-      .order('created_at', { ascending: false })
-      .limit(50);
+    // 1+2. Recent logs and recent comments by members are independent —
+    // fetch them in parallel instead of one after the other.
+    const [{ data: recentLogs }, { data: recentComments }] = await Promise.all([
+      supabase
+        .from('workout_logs')
+        .select('id, user_id, exercise_id, weight_kg, reps, logged_at, created_at, exercises(name), profiles(username, avatar_url)')
+        .in('user_id', memberIds)
+        .order('created_at', { ascending: false })
+        .limit(50),
+      supabase
+        .from('comments')
+        .select('log_id, created_at')
+        .in('user_id', memberIds)
+        .order('created_at', { ascending: false })
+        .limit(50),
+    ]);
 
     const logIdsFromLogs = (recentLogs || []).map((l: any) => l.id);
     const logIdsFromComments = (recentComments || []).map((c: any) => c.log_id);
@@ -559,11 +544,9 @@ function CirclesPageInner() {
     sparklineData.forEach((l: any) => {
       if (!sparklineMap[l.user_id]) sparklineMap[l.user_id] = {};
       if (!sparklineMap[l.user_id][l.exercise_id]) sparklineMap[l.user_id][l.exercise_id] = [];
-      const reps = l.reps || 1;
-      const e1RM = reps > 1 ? l.weight_kg * (36 / (37 - reps)) : l.weight_kg;
       sparklineMap[l.user_id][l.exercise_id].push({
         date: l.logged_at,
-        e1RM: Math.round(e1RM),
+        e1RM: roundedOneRepMax(l.weight_kg, l.reps),
       });
     });
 
@@ -714,10 +697,9 @@ function CirclesPageInner() {
 
       const userMax: Record<string, number> = {};
       logs.forEach((l: any) => {
-        const reps = l.reps || 1;
-        const e1RM = reps > 1 ? l.weight_kg * (36 / (37 - reps)) : l.weight_kg;
+        const e1RM = roundedOneRepMax(l.weight_kg, l.reps);
         if (!userMax[l.user_id] || e1RM > userMax[l.user_id]) {
-          userMax[l.user_id] = Math.round(e1RM);
+          userMax[l.user_id] = e1RM;
         }
       });
 
@@ -764,10 +746,9 @@ function CirclesPageInner() {
       logs.forEach((l: any) => {
         if (!userExerciseMax[l.user_id]) userExerciseMax[l.user_id] = {};
         const exName = exerciseMap[l.exercise_id];
-        const reps = l.reps || 1;
-        const e1RM = reps > 1 ? l.weight_kg * (36 / (37 - reps)) : l.weight_kg;
+        const e1RM = roundedOneRepMax(l.weight_kg, l.reps);
         if (!userExerciseMax[l.user_id][exName] || e1RM > userExerciseMax[l.user_id][exName]) {
-          userExerciseMax[l.user_id][exName] = Math.round(e1RM);
+          userExerciseMax[l.user_id][exName] = e1RM;
         }
       });
 

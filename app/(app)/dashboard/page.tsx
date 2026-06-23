@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { MuscleKey, MUSCLE_META, getMusclesForExercise } from '@/lib/muscle-utils';
+import { computeStreak, dayStr, estimateOneRepMax, setVolume, totalVolume } from '@/lib/metrics';
 import UserProfileModal from '../UserProfileModal';
 import {
   TrendingUp, TrendingDown, Dumbbell, Calendar, Award, Flame,
@@ -233,18 +234,20 @@ export default function DashboardPage() {
           const userIds = [...new Set(latestLogs.map((l: any) => l.user_id))];
           const exerciseIds = [...new Set(latestLogs.map((l: any) => l.exercise_id))];
           
-          const { data: profiles } = await supabase.from('profiles').select('id, username, avatar_url').in('id', userIds);
-          const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
-
-          // Fetch historical logs to check PRs
+          // These two lookups are independent of each other — run them in
+          // parallel instead of waterfalling profiles → historicalLogs.
           const thirtyDaysAgo = new Date();
           thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 60); // Check last 60 days for PRs to limit data size
-          const { data: historicalLogs } = await supabase
-            .from('workout_logs')
-            .select('user_id, exercise_id, weight_kg, created_at')
-            .in('user_id', userIds)
-            .in('exercise_id', exerciseIds)
-            .gte('created_at', thirtyDaysAgo.toISOString());
+          const [{ data: profiles }, { data: historicalLogs }] = await Promise.all([
+            supabase.from('profiles').select('id, username, avatar_url').in('id', userIds),
+            supabase
+              .from('workout_logs')
+              .select('user_id, exercise_id, weight_kg, created_at')
+              .in('user_id', userIds)
+              .in('exercise_id', exerciseIds)
+              .gte('created_at', thirtyDaysAgo.toISOString()),
+          ]);
+          const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
 
           // Group by user and time window (e.g. 2 hours)
           const groups: Record<string, GroupedLog> = {};
@@ -306,13 +309,7 @@ export default function DashboardPage() {
           .eq('user_id', user.id)
           .gte('logged_at', volumeDaysAgo.toISOString().split('T')[0]);
         
-        let vol = 0;
-        if (volumeLogs) {
-          volumeLogs.forEach((l: any) => {
-            vol += (l.weight_kg || 0) * (l.reps || 0);
-          });
-        }
-        setWeeklyVolume(vol);
+        setWeeklyVolume(totalVolume(volumeLogs || []));
 
         setRecentLogs(Object.values(groups).sort((a, b) => b.timestamp - a.timestamp));
         }
@@ -375,9 +372,8 @@ export default function DashboardPage() {
         });
 
         const byDate = exerciseLogs.reduce((acc: Record<string, { weight: number; volume: number; estimated1RM: number }>, l: any) => {
-          const vol = (l.weight_kg || 0) * (l.reps || 0);
-          const reps = l.reps || 1;
-          const e1RM = reps > 1 ? l.weight_kg * (36 / (37 - reps)) : l.weight_kg;
+          const vol = setVolume(l.weight_kg, l.reps);
+          const e1RM = estimateOneRepMax(l.weight_kg, l.reps);
 
           if (!acc[l.logged_at]) {
             acc[l.logged_at] = { weight: l.weight_kg, volume: vol, estimated1RM: e1RM };
@@ -429,12 +425,6 @@ export default function DashboardPage() {
       logs.forEach((l: any) => { if (!bestLift || l.weight_kg > bestLift.weight) bestLift = { name: l.exercises?.name || 'Unknown', weight: l.weight_kg }; });
 
       const today = new Date();
-      const dayStr = (d: Date) => {
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return `${y}-${m}-${day}`;
-      };
       const oneWeekAgo = new Date(today); oneWeekAgo.setDate(today.getDate() - 7);
       const twoWeeksAgo = new Date(today); twoWeeksAgo.setDate(today.getDate() - 14);
       const thisWeekLogs = logs.filter((l: any) => l.logged_at >= dayStr(oneWeekAgo)).length;
@@ -465,25 +455,8 @@ export default function DashboardPage() {
       setLeftMuscles(leftMusclesList);
       setHitCount(hitMuscles.size);
 
-      const activeDays = new Set(logs.map((l: any) => l.logged_at));
-      let streak = 0;
-      let restDayUsed = false;
-      const cursor = new Date(today);
-      // If today has no log, step back one day (grace for "haven't logged yet today")
-      if (!activeDays.has(dayStr(cursor))) cursor.setDate(cursor.getDate() - 1);
-      while (true) {
-        if (activeDays.has(dayStr(cursor))) {
-          streak++;
-          restDayUsed = false;
-          cursor.setDate(cursor.getDate() - 1);
-        } else if (!restDayUsed) {
-          // Allow one rest day — skip it but don't count it
-          restDayUsed = true;
-          cursor.setDate(cursor.getDate() - 1);
-        } else {
-          break; // Two consecutive missed days — streak ends
-        }
-      }
+      const activeDays = new Set<string>(logs.map((l: any) => l.logged_at));
+      const streak = computeStreak(activeDays, today);
 
       const last30Days = Array.from({ length: 30 }, (_, i) => {
         const d = new Date(today);
