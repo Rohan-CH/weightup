@@ -12,11 +12,16 @@ CREATE TABLE IF NOT EXISTS profiles (
   username TEXT UNIQUE NOT NULL,
   avatar_url TEXT,
   height_cm NUMERIC(5,2),
+  is_in_recovery BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 
+-- NOTE: this baseline SELECT policy is intentionally permissive so a fresh
+-- DB is usable before circles exist. It is REPLACED by a self-or-circle
+-- rule in security.sql — run that migration to lock down profiles. Do not
+-- ship the `USING (true)` version to production.
 DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON profiles;
 CREATE POLICY "Public profiles are viewable by everyone"
   ON profiles FOR SELECT USING (true);
